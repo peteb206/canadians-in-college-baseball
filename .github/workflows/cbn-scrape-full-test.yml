@@ -16,12 +16,12 @@ jobs:
                pip install -r requirements.txt
          -  name: roster scrape python script
             env:
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python roster_scrape.py y
          -  name: stat scrape python script
             env:
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python stat_scrape.py y
          -  name: commit files
@@ -39,13 +39,13 @@ jobs:
             env:
                KEYFILE: ${{ secrets.KEYFILE }}
                SHEET_NAME: Test - Canadians in College
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python roster_scrape.py n
          -  name: update Stats google sheet # use pushed results to update Google Sheet
             env:
                KEYFILE: ${{ secrets.KEYFILE }}
                SHEET_NAME: Test - Canadians in College
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python stat_scrape.py n

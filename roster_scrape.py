@@ -5,7 +5,6 @@ import json
 import time
 import logging
 import datetime
-import psutil
 import csv
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -23,15 +22,10 @@ logger = logging.getLogger()
 logger.addHandler(logging.FileHandler('scraper.log', 'w'))
 
 
-def check_cpu_and_memory():
-    logger.debug('CPU percent: {}% --- Memory % Used: {}%'.format(str(psutil.cpu_percent()), str(psutil.virtual_memory()[2])))
-
-
 def main():
-
     # Get roster sites
     year = os.environ.get('YEAR')
-    schools_df = pd.read_csv(f'roster_pages_{year}.csv')
+    schools_df = pd.read_csv(f'roster_pages_{year}.csv', dtype=str)
     # Ask for input
     full_run = True
     if len(sys.argv) == 1:
@@ -58,7 +52,7 @@ def main():
         # Scrape players from school websites
         df_lists = iterate_over_schools(schools_df) # Iterate over schools
         canadians_dict_list = df_lists[1]
-        canadians_df_new = format_df(canadians_dict_list, schools_df) # Format dictionaries to dataframe
+        canadians_df_new = format_df(canadians_dict_list) # Format dictionaries to dataframe
         canadians_df_new['stats_link'] = ''
         canadians_df_new['class'].fillna('Freshman', inplace=True)
         canadians_df_new['class'] = canadians_df_new['class'].str.replace(r'^\s*$', 'Freshman', regex=True)
@@ -75,10 +69,10 @@ def main():
         canadians_df['last_name'] = canadians_df['name'].str.replace('Š', 'S').str.split(' ').str[1]
         canadians_df = canadians_df.sort_values(by=['last_name', 'class', 'school'], ignore_index=True).drop('last_name', axis=1)
 
-        canadians_df.to_csv(f'canadians_{year}.csv', index=False) # Export to canadians_<year>.csv as a reference
+        canadians_df.astype(str).to_csv(f'canadians_{year}.csv', index=False, quoting=csv.QUOTE_NONNUMERIC) # Export to canadians_<year>.csv as a reference
 
     if full_run == False:
-        canadians_df = canadians_df[['name','position','class','school','division','state','hometown']] # Keep only relevant columns
+        canadians_df = canadians_df[['name', 'position', 'class', 'school', 'league', 'division', 'state', 'hometown']] # Keep only relevant columns
         update_gsheet(canadians_df, last_run) # Update Google Sheet
 
     # generate_html(canadians_df, 'canadians.html', last_run) # Generate HTML with DataTables
@@ -89,7 +83,7 @@ def main():
 
 def read_roster_norm(html, school):
     df = html[0]
-    if school['title'] not in ['Arizona Christian University', 'University of Northwestern Ohio']: # Has a real roster and a prospect/JV roster... ensure real roster is chosen
+    if school['school'] not in ['Arizona Christian University', 'University of Northwestern Ohio']: # Has a real roster and a prospect/JV roster... ensure real roster is chosen
         for temp_df in html:
             if len(temp_df.index) > len(df.index): # Assume largest table on page is actual roster
                 df = temp_df
@@ -97,7 +91,7 @@ def read_roster_norm(html, school):
         new_header = df.iloc[0] # grab the first row for the header
         df = df[1:] # take the data less the header row
         df.columns = new_header # set the header row as the df header
-    elif school['title'] in [
+    elif school['school'] in [
         'Mineral Area',
         'Cowley',
         'Frank Phillips',
@@ -106,40 +100,40 @@ def read_roster_norm(html, school):
         'Olivet Nazarene University',
         'Crowder',
         'Mount Mercy University',
-        'Patrick Henry',
+        'Patrick & Henry',
         'Minnesota State',
         'Cochise',
         'University of Saint Francis',
-        'Ohlone College',
+        'Ohlone',
         'Western Tech',
         'Midway University'
     ]:
         # Columns in HTML table are messed up... keep an eye on these schools to see if fixed
         df.columns = ['Ignore', 'No.', 'Name', 'Pos.', 'B/T', 'Year', 'Ht.', 'Wt.', 'Hometown']
-    elif school['title'] in [
-        'Allan Hancock College'
+    elif school['school'] in [
+        'Allan Hancock'
     ]:
         df.columns = ['Ignore', 'No.', 'Name', 'Pos.', 'B/T', 'Ht.', 'Wt.', 'Year', 'Hometown']
-    elif school['title'] in [
+    elif school['school'] in [
         'McCook',
         'CCBC Essex'
     ]:
         df.columns = ['Ignore', 'No.', 'Name', 'Pos.', 'B/T', 'Year', 'Ht.', 'Hometown']
-    elif school['title'] in [
+    elif school['school'] in [
         'Rivier University'
     ]:
         df.columns = ['Ignore', 'No.', 'Name', 'Year', 'Pos.', 'B/T', 'Ht.', 'Hometown']
-    elif school['title'] in [
+    elif school['school'] in [
         'Morningside College'
     ]:
         df.columns = ['Ignore', 'No.', 'Name', 'Pos.', 'Year', 'Ht.', 'Hometown']
-    elif school['title'] in [
+    elif school['school'] in [
         'Northeastern',
         'Cayuga'
     ]:
         df.columns = ['Ignore', 'No.', 'Name', 'Pos.', 'B/T', 'Year', 'Hometown']
-    elif school['title'] in [
-        'Dordt College'
+    elif school['school'] in [
+        'Dordt University'
     ]:
         df = df[df['Name'] != df['Year']]
     return df
@@ -314,21 +308,21 @@ def iterate_over_schools(schools_df):
 
     # Iterate
     for index, school in schools_df.iterrows():
-        print_row = '| {} | {} | {} | {} | {} |'.format(str(index).ljust(index_col_length-2), school['title'].ljust(title_col_length-2), '-'*(players_col_length-2), '-'*(canadians_col_length-2), str(school['roster_link']).ljust(roster_link_col_length-2))
+        print_row = '| {} | {} | {} | {} | {} |'.format(str(index).ljust(index_col_length-2), school['school'].ljust(title_col_length-2), '-'*(players_col_length-2), '-'*(canadians_col_length-2), str(school['roster_link']).ljust(roster_link_col_length-2))
         error_message = ''
         try:
-            df = read_roster(session, school.copy().to_dict(), header)
+            df = read_roster(session, school.copy().to_dict(), header) if school['roster_link'] != '' else pd.DataFrame()
             canadian_count = '0'
             if type(df) == type(pd.DataFrame()): # Table(s) exist in HTML
                 # Add team's roster to list
-                df['__school'], df['__division'], df['__state']  = school['title'], school['division'], school['state']
+                df['__school'], df['__league'], df['__division'], df['__state']  = school['school'], school['league'], school['division'], school['state']
                 roster_df_list.append(df)
                 canadians_dicts = filter_canadians(df, canada_strings) # Get a list of table rows that seem to have a Canadian player
                 canadian_count = str(len(canadians_dicts))
             elif type(df) == type(''): # No table(s) exist in HTML... search all text for certain strings
                 # if any(canada_string.lower() in df.lower() for canada_string in canada_strings):
                     # canadian_count = '*****' # String of interest found in HTML text
-                    # schools_to_check_manually.append('{}: {}'.format(school['title'], school['roster_link']))
+                    # schools_to_check_manually.append('{}: {}'.format(school['school'], school['roster_link']))
                 df = pd.DataFrame()
             if (canadian_count != '0') & (canadian_count != '*****'):
                 canadians_dict_list.extend(canadians_dicts)
@@ -344,11 +338,10 @@ def iterate_over_schools(schools_df):
         except Exception as e:
             error_message = str(e)
         if error_message != '':
-            print_row = '| {} | {} | {} | {} | {}'.format(str(index).ljust(index_col_length-2), school['title'].ljust(title_col_length-2), '-'*(players_col_length-2), '-'*(canadians_col_length-2), str(school['roster_link']) + ': {}'.format(error_message))
+            print_row = '| {} | {} | {} | {} | {}'.format(str(index).ljust(index_col_length-2), school['school'].ljust(title_col_length-2), '-'*(players_col_length-2), '-'*(canadians_col_length-2), str(school['roster_link']) + ': {}'.format(error_message))
             fail_index_list.append(index)
             fail_count += 1
             logger.info(print_row)
-        # check_cpu_and_memory()
         time.sleep(0.05)
     logger.info(border_row)
 
@@ -418,20 +411,6 @@ def format_player_position(string):
     return string
 
 
-def format_player_division(string):
-    level = 'Division ' + string[-1]
-    if string.upper() in ['NAIA', 'USCAA']:
-        return string.upper()
-    elif 'JUCO' in string.upper():
-        return 'JUCO: ' + level
-    elif string.upper() == 'CCCAA':
-        return 'California CC'
-    elif string.upper() == 'NWAC':
-        return 'NW Athletic Conference'
-    else:
-        return 'NCAA: ' + level
-
-
 def format_player_hometown(string):
     string = re.sub(r'\s*\(*(?:Canada|CANADA|Can.|CN|CAN|CA)\)*\.*', '', string) # Remove references to Canada
 
@@ -463,8 +442,8 @@ def format_player_hometown(string):
     return string
 
 
-def format_df(dict_list, schools_df):
-    cols = ['name', 'position', 'b', 't', 'class', 'school', 'division', 'state', 'hometown']
+def format_df(dict_list):
+    cols = ['name', 'position', 'b', 't', 'class', 'school', 'league', 'division', 'state', 'hometown']
     new_dict_list = list()
     for dictionary in dict_list:
         new_dict = dict()
@@ -510,9 +489,7 @@ def format_df(dict_list, schools_df):
 
                 # Inlcude __ keys
                 elif key_str.startswith('__'):
-                    if key == '__division':
-                        new_dict[key_str] = format_player_division(value_str)
-                    elif key == '__hometown':
+                    if key == '__hometown':
                         hometown_orig = value_str
                         new_dict[key_str] = format_player_hometown(value_str)
                     else:
@@ -534,80 +511,6 @@ def format_df(dict_list, schools_df):
     canadians_df = canadians_df.loc[:, canadians_df.columns.str.startswith('__')]
     canadians_df.columns = canadians_df.columns.str.lstrip('__')
     return canadians_df[cols]
-
-
-def generate_html(df, file_name, last_run):
-    pd.set_option('colheader_justify', 'center')
-
-    html_string = '''
-<!DOCTYPE HTML>
-<html>
-    <head>
-        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.23/css/jquery.dataTables.css">
-        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/1.6.5/css/buttons.dataTables.min.css">
-        <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.5.1.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.23/js/jquery.dataTables.min.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.6.5/js/dataTables.buttons.min.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.6.5/js/buttons.html5.min.js"></script>
-        <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.6.5/js/buttons.print.min.js"></script>
-        <script type="text/javascript">
-            $(document).ready(function () {{
-                $('table.display').DataTable({{
-                    'lengthMenu': [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                    'pageLength': -1,
-                    'order': [[2, 'asc'], [0, 'asc'], [3, 'asc']],
-                    'dom': 'Bflrtip'
-                }})
-            }});
-        </script>
-        <title>2021 Canadians in College</title>
-    </head>
-    <header>
-        <h1 style='text-align: center'>2021 Canadians in College</h1>
-        <h2 style='text-align: center'>{number_of_players} Canadian players</h2>
-        <h5 style='text-align: center'>{last_run}</h5>
-    </header>
-    <body>
-    '''.format(number_of_players = str(len(df.index)), last_run = last_run)
-
-    iter = 0
-    for division in [
-        'NCAA: Division 1', 'NCAA: Division 2', 'NCAA: Division 3', 'NAIA',
-        'JUCO: Division 1',
-        'JUCO: Division 2',
-        'JUCO: Division 3',
-        'California CC',
-        'NW Athletic Conference',
-        'USCAA'
-    ]:
-        temp_df = df[df['division'] == division].drop(['division'], axis=1)
-        html_string += '''
-        <div style='padding:3%'>
-            <h2 style='text-align: center'>{division}</h2>
-            {table}
-        </div>
-        '''.format(division = division,
-                   number_of_players = str(len(temp_df.index)),
-                   table = temp_df.to_html(na_rep = '', index=False, classes='display" id="table{}'.format(str(iter))))
-        iter += 1
-
-    html_string += '''
-    </body>
-</html>.
-    '''
-
-    # Make cells editable
-    # html_string = html_string.replace('<td>', "<td contenteditable='true'>")
-
-    # Custom sort order for class: Freshman, Sophomore, Junior, Senior
-    for class_year, class_year_num in {'Freshman': '1', 'Sophomore': '2', 'Junior': '3', 'Senior': '4'}.items():
-        html_string = html_string.replace('>{}<'.format(class_year), " data-order='{}'>{}<".format(class_year_num, class_year))
-
-    with open(file_name, 'w') as f:
-        f.write(html_string)
 
 
 def update_gsheet(df, last_run):
