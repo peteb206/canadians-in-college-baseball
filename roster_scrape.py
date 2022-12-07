@@ -25,7 +25,7 @@ logger.addHandler(logging.FileHandler('scraper.log', 'w'))
 def main():
     # Get roster sites
     year = os.environ.get('YEAR')
-    schools_df = pd.read_csv(f'roster_pages_{year}.csv', dtype=str)
+    schools_df = pd.read_csv(f'roster_pages_{year}.csv', dtype=str).fillna('')
     # Ask for input
     full_run = True
     if len(sys.argv) == 1:
@@ -41,7 +41,7 @@ def main():
     f.write(last_run)
     f.close()
 
-    canadians_df = pd.read_csv(f'canadians_{year}.csv') # Initialize canadians_df
+    canadians_df = pd.read_csv(f'canadians_{year}.csv', dtype=str).fillna('') # Initialize canadians_df
     if full_run == True: # Run full web scraper
         # Set criteria for "Canadian" player search
         global city_strings, province_strings, country_strings, canada_strings, hometown_conversion_dict, ignore_strings
@@ -59,7 +59,7 @@ def main():
         find_diffs(canadians_df_orig, canadians_df_new)
 
         # Combine new results with old results
-        canadians_df = pd.concat([canadians_df_orig, pd.read_csv(f'canadians_manual_{year}.csv'), canadians_df_new], ignore_index=True) # Add players who could not be scraped
+        canadians_df = pd.concat([canadians_df_orig, pd.read_csv(f'canadians_manual_{year}.csv', dtype=str).fillna(''), canadians_df_new], ignore_index=True) # Add players who could not be scraped
         canadians_df.drop_duplicates(subset=['name', 'hometown'], keep='first', ignore_index=True, inplace=True) # Drop duplicate names (keep manually added rows if there is an "identical" scraped row)
         canadians_df.drop_duplicates(subset=['name', 'school'], keep='first', ignore_index=True, inplace=True) # Drop duplicate names part 2
         canadians_df.drop_duplicates(subset=['name', 'position', 'b', 't'], keep='first', ignore_index=True, inplace=True) # Drop duplicate names part 2
@@ -544,25 +544,33 @@ def update_gsheet(df, last_run):
     summary_data = [['Canadian Baseball Network', '', '', '', last_run], ['Pete Berryman', '', '', '', '']] + blank_row
     summary_data += ([['Total', '{} players'.format(str(len(df.index))), '', '', '']] + blank_row)
 
-    # Fill NaN values in dataframe with blank string
-    df.fillna('', inplace=True)
-
     # Add title row
     col_headers = [[col[0].upper() + col[1:] for col in df.drop(['division', 'class'], axis=1).columns.values.tolist()]]
     player_data = list()
     coach_data = [['Coaches', '', '', '', '']] + blank_row
-    coaches = pd.read_csv('coaches.csv')
+    coaches = pd.read_csv('coaches.csv', dtype=str).fillna('')
 
-    division_list = ['NCAA: Division 1', 'NCAA: Division 2', 'NCAA: Division 3', 'NAIA', 'JUCO: Division 1', 'JUCO: Division 2', 'JUCO: Division 3', 'California CC', 'NW Athletic Conference', 'USCAA']
+    division_list = [
+        ('NCAA', '1', 'NCAA: Division 1'),
+        ('NCAA', '2', 'NCAA: Division 2'),
+        ('NAIA', '', 'NAIA'),
+        ('JUCO', '1', 'JUCO: Division 1'),
+        ('JUCO', '2', 'JUCO: Division 2'),
+        ('JUCO', '3', 'JUCO: Division 3'),
+        ('CCCAA', '', 'California CC'),
+        ('NWAC', '', 'NW Athletic Conference'),
+        ('USCAA', '', 'USCAA')
+    ]
     class_list = ['Freshman', 'Sophomore', 'Junior', 'Senior']
 
     # Loop through divisions
     for division in division_list:
+        league, division, label = division
         # Subset dataframe
-        df_split_div = df[df['division'] == division].drop(['division'], axis=1)
+        df_split_div = df[(df['league'] == league) & (df['division'] == division)].drop(['division'], axis=1)
         if len(df_split_div.index) > 0:
             # Row/Division Header
-            player_data += [[division, '', '', '', '']]
+            player_data += [[label, '', '', '', '']]
 
         for class_year in class_list:
             df_split_class = pd.DataFrame()
@@ -580,11 +588,11 @@ def update_gsheet(df, last_run):
         # Compile data rows
         player_data += blank_row
         if len(df_split_div.index) > 0:
-            summary_data.append([division + ' ', '{} players'.format(str(len(df_split_div.index))), '', '', ''])
+            summary_data.append([label + ' ', '{} players'.format(str(len(df_split_div.index))), '', '', ''])
 
-        coaches_split_div = coaches[coaches['division'] == division].drop(['division'], axis=1)
+        coaches_split_div = coaches[(coaches['league'] == league) & (coaches['division'] == division)].drop(['division'], axis=1)
         if len(coaches_split_div.index) > 0:
-            coach_data += ([[division, '', '', '', '']] + [[col[0].upper() + col[1:] for col in coaches_split_div.columns.values.tolist()]] + coaches_split_div.values.tolist() + blank_row)
+            coach_data += ([[label, '', '', '', '']] + [[col[0].upper() + col[1:] for col in coaches_split_div.columns.values.tolist()]] + coaches_split_div.values.tolist() + blank_row)
 
     # Add data to sheets
     data = summary_data + blank_row + player_data + coach_data
