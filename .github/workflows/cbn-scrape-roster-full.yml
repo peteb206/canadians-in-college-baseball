@@ -19,7 +19,7 @@ jobs:
                pip install -r requirements.txt
          -  name: roster scrape python script
             env:
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python roster_scrape.py y
          -  name: commit files
@@ -33,10 +33,10 @@ jobs:
             with:
                github_token: ${{ secrets.GITHUB_TOKEN }}
                branch: main
-         -  name: update 2022 google sheet # use pushed results to update Google Sheet
+         -  name: update 2023 google sheet # use pushed results to update Google Sheet
             env:
                KEYFILE: ${{ secrets.KEYFILE }}
                SHEET_NAME: Canadians in College
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python roster_scrape.py n

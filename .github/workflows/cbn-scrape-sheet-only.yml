@@ -14,17 +14,17 @@ jobs:
             run: |
                python -m pip install --upgrade pip
                pip install -r requirements.txt
-         -  name: update 2022 google sheet # use pushed results to update Google Sheet
+         -  name: update 2023 google sheet # use pushed results to update Google Sheet
             env:
                KEYFILE: ${{ secrets.KEYFILE }}
                SHEET_NAME: Test - Canadians in College
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python roster_scrape.py n
          -  name: update Stats google sheet # use pushed results to update Google Sheet
             env:
                KEYFILE: ${{ secrets.KEYFILE }}
                SHEET_NAME: Test - Canadians in College
-               YEAR: 2022
+               YEAR: 2023
             run: |
                python stat_scrape.py n

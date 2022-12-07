@@ -35,7 +35,7 @@ jobs:
             with:
                github_token: ${{ secrets.GITHUB_TOKEN }}
                branch: main
-         -  name: update 2022 google sheet # use pushed results to update Google Sheet
+         -  name: update 2023 google sheet # use pushed results to update Google Sheet
             env:
                KEYFILE: ${{ secrets.KEYFILE }}
                SHEET_NAME: Test - Canadians in College
