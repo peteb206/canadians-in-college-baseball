@@ -545,7 +545,7 @@ def update_gsheet(df, last_run):
     summary_data += ([['Total', '{} players'.format(str(len(df.index))), '', '', '']] + blank_row)
 
     # Add title row
-    col_headers = [[col[0].upper() + col[1:] for col in df.drop(['division', 'class'], axis=1).columns.values.tolist()]]
+    col_headers = [[col[0].upper() + col[1:] for col in df.drop(['league', 'division', 'class'], axis=1).columns.values.tolist()]]
     player_data = list()
     coach_data = [['Coaches', '', '', '', '']] + blank_row
     coaches = pd.read_csv('coaches.csv', dtype=str).fillna('')
@@ -567,7 +567,7 @@ def update_gsheet(df, last_run):
     for division in division_list:
         league, division, label = division
         # Subset dataframe
-        df_split_div = df[(df['league'] == league) & (df['division'] == division)].drop(['division'], axis=1)
+        df_split_div = df[(df['league'] == league) & (df['division'] == division)].drop(['league', 'division'], axis=1)
         if len(df_split_div.index) > 0:
             # Row/Division Header
             player_data += [[label, '', '', '', '']]
@@ -590,7 +590,7 @@ def update_gsheet(df, last_run):
         if len(df_split_div.index) > 0:
             summary_data.append([label + ' ', '{} players'.format(str(len(df_split_div.index))), '', '', ''])
 
-        coaches_split_div = coaches[(coaches['league'] == league) & (coaches['division'] == division)].drop(['division'], axis=1)
+        coaches_split_div = coaches[(coaches['league'] == league) & (coaches['division'] == division)].drop(['league', 'division'], axis=1)
         if len(coaches_split_div.index) > 0:
             coach_data += ([[label, '', '', '', '']] + [[col[0].upper() + col[1:] for col in coaches_split_div.columns.values.tolist()]] + coaches_split_div.values.tolist() + blank_row)
 
@@ -600,7 +600,7 @@ def update_gsheet(df, last_run):
 
     # Format division/class headers
     division_list.append('Coaches')
-    format_headers(sheet, players_sheet_id, players_sheet.findall(re.compile(r'^(' + '|'.join(division_list) + r')$')), True, len(blank_row[0]))
+    format_headers(sheet, players_sheet_id, players_sheet.findall(re.compile(r'^(' + '|'.join([x[2] for x in division_list]) + r')$')), True, len(blank_row[0]))
     time.sleep(120) # break up the requests to avoid error
     format_headers(sheet, players_sheet_id, players_sheet.findall(re.compile(r'^(' + '|'.join(['Freshmen', 'Sophomores', 'Juniors', 'Seniors']) + r')$')), False, len(blank_row[0]))
     time.sleep(120) # break up the requests to avoid error
