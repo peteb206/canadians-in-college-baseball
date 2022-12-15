@@ -35,7 +35,7 @@ class Page:
     '''
     # Test code:
     from model import Page
-    page = Page(url='https://goairforcefalcons.com/sports/baseball/roster/2023')
+    page = Page(url = 'https://goairforcefalcons.com/sports/baseball/roster/2023')
     page.get_table()
     '''
 
@@ -65,6 +65,7 @@ class Page:
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
+                allow_redirects = False,
                 timeout = 10
             )
 
@@ -128,12 +129,16 @@ class Page:
         elif soup.find('div', {'class': 's-person-card'}):
             self.df = self.__parse_sidearm_cards__(soup)
         if len(self.df.columns) > 0:
+            if [str(col) for col in self.df.columns] == [str(i) for i in range(len(self.df.columns))]:
+                new_header = self.df.iloc[0] # grab the first row for the header
+                self.df = self.df[1:] # take the data less the header row
+                self.df.columns = new_header # set the header row as the df header
             # Standardize columns / properly align column names, if applicable
             cols = [str(col).lower() for col in self.df.columns]
             if cols[-1] == f'unnamed: {len(cols) - 1}':
                 cols = ['ignore'] + cols[:-1]
             self.df.columns = cols
-        return self.df
+        return self.df.dropna(axis = 0, how = 'all') # remove rows with all NaN
 
 
 class School:
@@ -181,18 +186,22 @@ class School:
             return 'Junior'
         elif ('so' in string) | (string == 's') | ('2' in string):
             return 'Sophomore'
+        elif ('sen' in string) | ('sr' in string) | ('gr' in string) | ('4' in string) | ('5' in string) | ('6' in string):
+            return 'Senior'
         elif ('f' in string) | ('1' in string) | ('hs' in string) | (string == 'rs.') | (string == 'rs'):
             return 'Freshman'
-        elif ('sr' in string) | ('gr' in string) | ('4' in string) | ('5' in string) | ('6' in string):
-            return 'Senior'
-        return string
+        return ''
 
     def __format_player_name__(self, name_string: str):
         if name_string == name_string.upper(): # All caps... Set to proper case
-            name_string = [name_part[0].upper() + name_part[1:].lower() for name_part in name_string.split()]
+            name_string = ' '.join([name_part[0].upper() + name_part[1:].lower() for name_part in name_string.split()])
         full_name_string =  ' '.join(name_string.split(',')[::-1]).strip() # Format as "First Last"
         full_name_string = re.sub(r'\s*\d+', '', full_name_string) # Remove digits, e.g. First Last 0
-        first_name, last_name = full_name_string.split(None, 1)
+        full_name_string_split = full_name_string.split(None, 1)
+        if len(full_name_string_split) == 2:
+            first_name, last_name = full_name_string_split
+        else:
+            first_name, last_name = ' ', full_name_string
         return first_name, last_name
 
     def __format_player_position__(self, string: str):
@@ -259,7 +268,7 @@ class School:
 
         if debug:
             print(f'"{string}" converted to ---> City: "{city}" | Province: "{province}"')
-        return city, province    
+        return re.sub(r'[^\w\-\s\.]', '', city).strip(), province # remove unwanted characters from city
 
     def players(self, debug=False):
         if len(self.__players) == 0:
@@ -279,10 +288,13 @@ class School:
                         # Set first_name and last_name columns
                         elif ('first' in key) & ('last' not in key):
                             new_dict['first_name'] = value_str
-                        elif (key == 'last') | (('last' in key) & ('nam' in key)):
+                        elif (key == 'last') | (('last' in key) & ('nam' in key) & ('first' not in key)):
                             new_dict['last_name'] = value_str
-                        elif ('name' in key) | (key == 'player') | (key == 'student athlete'):
-                            new_dict['first_name'], new_dict['last_name'] = self.__format_player_name__(value_str)
+                        elif ('name' in key) | ('full' in key) | (key == 'player') | (key == 'student athlete'):
+                            if ((key == 'name') & ('name.1' in dictionary.keys())) | ((key == 'name.1') & ('name' in dictionary.keys())):
+                                new_dict['first_name'], new_dict['last_name'] = dictionary['name'], dictionary['name.1']
+                            else:
+                                new_dict['first_name'], new_dict['last_name'] = self.__format_player_name__(value_str)
 
                         # Set positions column
                         elif key.startswith('po'):
