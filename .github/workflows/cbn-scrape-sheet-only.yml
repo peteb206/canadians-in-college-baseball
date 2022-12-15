@@ -14,17 +14,6 @@ jobs:
             run: |
                python -m pip install --upgrade pip
                pip install -r requirements.txt
-         -  name: update 2023 google sheet # use pushed results to update Google Sheet
-            env:
-               KEYFILE: ${{ secrets.KEYFILE }}
-               SHEET_NAME: Test - Canadians in College
-               YEAR: 2023
+         -  name: roster scrape python script
             run: |
-               python roster_scrape.py n
-         -  name: update Stats google sheet # use pushed results to update Google Sheet
-            env:
-               KEYFILE: ${{ secrets.KEYFILE }}
-               SHEET_NAME: Test - Canadians in College
-               YEAR: 2023
-            run: |
-               python stat_scrape.py n
+               python -c 'from actions import fetch_players; fetch_players(fetch = False, update_google_sheet = True)'

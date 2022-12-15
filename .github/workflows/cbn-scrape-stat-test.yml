@@ -14,26 +14,3 @@ jobs:
             run: |
                python -m pip install --upgrade pip
                pip install -r requirements.txt
-         -  name: stat scrape python script
-            env:
-               YEAR: 2022
-            run: |
-               python stat_scrape.py y
-         -  name: commit files
-            run: |
-               git config --local user.email "action@github.com"
-               git config --local user.name "GitHub Action"
-               git add -A
-               git commit -m "auto-run stat_scrape.py" -a
-         -  name: push changes
-            uses: ad-m/github-push-action@v0.6.0
-            with:
-               github_token: ${{ secrets.GITHUB_TOKEN }}
-               branch: main
-         -  name: update Stats google sheet # use pushed results to update Google Sheet
-            env:
-               KEYFILE: ${{ secrets.KEYFILE }}
-               SHEET_NAME: Test - Canadians in College
-               YEAR: 2022
-            run: |
-               python stat_scrape.py n
