@@ -17,13 +17,13 @@ def players():
     schools_df['success'] = False
 
     # Set up logging
-    index_col_length, school_col_length, players_col_length, canadians_col_length, roster_link_col_length = len(str(len(schools_df.index))), int(max(schools_df['school'].str.len())), 7, 9, int(max(schools_df['roster_link'].str.len()))
+    index_col_length, school_col_length, players_col_length, canadians_col_length, roster_link_col_length = len(str(len(schools_df.index))), int(max(schools_df['school'].str.len())), 7, 9, 11
     print()
     print('Reading the rosters of {} schools...'.format(str(len(schools_df.index))))
     print()
-    border_row = f'|{"-" * (index_col_length + 2)}|{"-" * (school_col_length + 2)}|{"-" * (players_col_length + 2)}|{"-" * (canadians_col_length + 2)}|{"-" * (roster_link_col_length + 2)}|'
+    border_row = f'|{"-" * (index_col_length + 2)}|{"-" * (school_col_length + 2)}|{"-" * (players_col_length + 2)}|{"-" * (canadians_col_length + 2)}|{"-" * (roster_link_col_length + 2)}'
     print(border_row)
-    print(f'| {"#".ljust(index_col_length)} | {"school".ljust(school_col_length)} | {"players".ljust(players_col_length)} | {"canadians".ljust(canadians_col_length)} | {"roster_link".ljust(roster_link_col_length)} |')
+    print(f'| {"#".ljust(index_col_length)} | {"school".ljust(school_col_length)} | {"players".ljust(players_col_length)} | {"canadians".ljust(canadians_col_length)} | {"roster_link".ljust(roster_link_col_length)}')
     print(border_row)
 
     all_canadians, session = list(), requests.Session()
@@ -45,7 +45,7 @@ def players():
             all_canadians += canadians
         except Exception as e:
             print(f'ERROR: {school.name} - {school.roster_page.url} - {str(e)}')
-        print(f'| {str(i + 1).ljust(index_col_length)} | {school.name.ljust(school_col_length)} | {str(len(players)).ljust(players_col_length)} | {str(len(canadians)).ljust(canadians_col_length)} | {school.roster_page.url.ljust(roster_link_col_length)} |')
+        print(f'| {str(i + 1).ljust(index_col_length)} | {school.name.ljust(school_col_length)} | {str(len(players)).ljust(players_col_length)} | {str(len(canadians)).ljust(canadians_col_length)} | {school.roster_page.url} {school.roster_page.status}')
         schools_df.at[i, 'success'] = len(players) > 0
         time.sleep(1)
     print(border_row)
@@ -62,8 +62,8 @@ def players():
     existing_players_df['positions'] = existing_players_df['positions'].str.upper() # INF is converted to inf
 
     # Combine existing and new values based on success of scrape
-    inherited_players_df = pd.merge(existing_players_df, schools_df, how = 'left', on = ['school', 'league', 'division', 'state'])
-    combined_players_df = pd.concat([inherited_players_df[~inherited_players_df['success'].fillna(False)], new_players_df], ignore_index = True).drop(['roster_link', 'success'], axis = 1)
+    existing_players_df = pd.merge(existing_players_df, schools_df, how = 'left', on = ['school', 'league', 'division', 'state'])
+    combined_players_df = pd.concat([existing_players_df[~existing_players_df['success'].fillna(False)], new_players_df], ignore_index = True).drop(['roster_link', 'success'], axis = 1)
     combined_players_df.sort_values(by = ['last_name', 'first_name'], inplace = True)
 
     # Output to Canadians in College Hub Google Sheet
@@ -72,7 +72,7 @@ def players():
     players_worksheet.insert_rows(combined_players_df[players_worksheet_columns].values.tolist(), row = 3) # Add updated data
 
     # Last Run
-    diff_df = pd.merge(existing_players_df, combined_players_df, on=['last_name', 'first_name', 'school'], how='outer', suffixes = ['_', ''], indicator='diff')[players_worksheet_columns + ['diff']]
+    diff_df = pd.merge(existing_players_df, combined_players_df, on = ['last_name', 'first_name', 'school'], how='outer', suffixes = ['_', ''], indicator = 'diff')[players_worksheet_columns + ['diff']]
     diff_df = diff_df[diff_df['diff'] != 'both']
     diff_df['diff'] = diff_df['diff'].apply(lambda x: 'dropped' if x == 'left_only' else 'added')
 

@@ -49,6 +49,7 @@ class Page:
         check_string_arg(name = 'url', value = url, disallowed_values = [''])
 
         self.url = url
+        self.status = ''
         self.session = requests.Session() if session == None else session
         self.__html = ''
         self.dfs = list()
@@ -65,7 +66,6 @@ class Page:
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                allow_redirects = False,
                 timeout = 10
             )
 
@@ -74,6 +74,9 @@ class Page:
             # Re-request if URL is not blank and either re-request manually ordered or html string is blank
             self.__html = ''
             response = self.__fetch_roster_page__()
+            if (len(response.history) > 0) & (response.url != self.url):
+                self.status += f'--> {response.url} '
+            self.status += u'\u2713' if response.status_code == 200 else u'\u2717'
             self.__html = response.text
         return self.__html
 
@@ -210,7 +213,7 @@ class School:
         if 'P' in string:
             position_set.add('P')
         # Catcher
-        if ('C' in string) & ('CF' not in string) & ('CI' not in string):
+        if ('C' in string) & ('CF' not in string) & ('CI' not in string) & ('PITCHER' not in string):
             position_set.add('C')
         # Infield
         if ('IN' in string) | ('IF' in string):
@@ -222,14 +225,14 @@ class School:
                 if str(base) in string:
                     position_set.add(f'{base}B')
         # Outfield
-        if 'OF' in string:
+        if ('OF' in string) | ('OUT' in string):
             position_set.add('OF')
         else:
             for outfield in ['LF', 'CF', 'RF']:
                 if outfield in string:
                     position_set.add(outfield)
         # Designated Hitter & Utility
-        if 'D' in string:
+        if ('D' in string) & ('HAND' not in string):
             position_set.add('DH')
         if 'U' in string:
             position_set.add('UTIL')
@@ -389,7 +392,7 @@ city_strings = {
 
 province_strings = {
     'Alberta': ['alberta', ', alta.', ', ab', 'a.b.'],
-    'British Columbia': ['british columbia', ', b.c', ', bc'],
+    'British Columbia': ['british columbia', 'b.c', ' bc'],
     'Manitoba': ['manitoba', ', mb', ', man.'],
     'New Brunswick': ['new brunswick', ', nb', 'n.b.'],
     'Newfoundland & Labrador': ['newfoundland', 'nfld', ', nl'],
