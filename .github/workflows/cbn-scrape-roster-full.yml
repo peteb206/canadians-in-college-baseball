@@ -1,7 +1,7 @@
 name: cbn-scrape-roster-full
 on:
-   # schedule:
-      # - cron: '0 8 * * 1' # runs at 8:00 UTC on Mondays
+   schedule:
+      - cron: '0 8 * * 1' # runs at 8:00 UTC on Mondays
    workflow_dispatch:
 jobs:
    build:
@@ -19,24 +19,6 @@ jobs:
                pip install -r requirements.txt
          -  name: roster scrape python script
             env:
-               YEAR: 2023
+               GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
             run: |
-               python roster_scrape.py y
-         -  name: commit files
-            run: |
-               git config --local user.email "action@github.com"
-               git config --local user.name "GitHub Action"
-               git add -A
-               git commit -m "auto-run roster_scrape.py" -a
-         -  name: push changes
-            uses: ad-m/github-push-action@v0.6.0
-            with:
-               github_token: ${{ secrets.GITHUB_TOKEN }}
-               branch: main
-         -  name: update 2023 google sheet # use pushed results to update Google Sheet
-            env:
-               KEYFILE: ${{ secrets.KEYFILE }}
-               SHEET_NAME: Canadians in College
-               YEAR: 2023
-            run: |
-               python roster_scrape.py n
+               python -c 'from actions import players; players(fetch = True, update_google_sheet = True)'
