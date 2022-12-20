@@ -6,6 +6,9 @@ import re
 import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
 
 class GoogleSpreadsheet:
@@ -49,8 +52,9 @@ class Page:
         check_string_arg(name = 'url', value = url, disallowed_values = [''])
 
         self.url = url
-        self.status = ''
         self.session = requests.Session() if session == None else session
+        self.redirect = False
+        self.status = u'\u2717'
         self.__html = ''
         self.dfs = list()
         self.df = pd.DataFrame()
@@ -60,22 +64,24 @@ class Page:
 
     def __fetch_roster_page__(self):
         if self.url:
-            return self.session.get(
-                self.url,
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                timeout = 10
-            )
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+            timeout = 10
+            try: # send verified request
+                return self.session.get(self.url, headers = headers, timeout = timeout, verify = True)
+            except requests.exceptions.SSLError: # send unverified request
+                print(f'WARNING: sending unverified request to {self.url}')
+                return self.session.get(self.url, headers = headers, timeout = timeout, verify = False)
 
     def html(self, new_request = False):
         if (self.url != '') & (new_request | (self.__html == '')):
             # Re-request if URL is not blank and either re-request manually ordered or html string is blank
             self.__html = ''
             response = self.__fetch_roster_page__()
-            if (len(response.history) > 0) & (response.url != self.url):
-                self.status += f'--> {response.url} '
+            self.redirect = (len(response.history) > 0) & (response.url != self.url)
+            self.status = f'--> {response.url} ' if self.redirect else ''
             self.status += u'\u2713' if response.status_code == 200 else u'\u2717'
             self.__html = response.text
         return self.__html
@@ -210,7 +216,7 @@ class School:
     def __format_player_position__(self, string: str):
         position_set = set()
         # Pitcher
-        if 'P' in string:
+        if ('P' in string) & ('STOP' not in string) & ('PLAY' not in string):
             position_set.add('P')
         # Catcher
         if ('C' in string) & ('CF' not in string) & ('CI' not in string) & ('PITCHER' not in string):
@@ -218,12 +224,18 @@ class School:
         # Infield
         if ('IN' in string) | ('IF' in string):
             position_set.add('INF')
-        elif ('SS' in string):
-            position_set.add('SS')
         else: # 1B, 2B, 3B
             for base in range(1, 4):
                 if str(base) in string:
                     position_set.add(f'{base}B')
+            if 'FIRST' in string:
+                position_set.add('1B')
+            if 'SECOND' in string:
+                position_set.add('2B')
+            if 'THIRD' in string:
+                position_set.add('3B')
+            if ('SS' in string) | ('SHORT' in string):
+                position_set.add('SS')
         # Outfield
         if ('OF' in string) | ('OUT' in string):
             position_set.add('OF')
@@ -232,9 +244,9 @@ class School:
                 if outfield in string:
                     position_set.add(outfield)
         # Designated Hitter & Utility
-        if ('D' in string) & ('HAND' not in string):
+        if ('DH' in string) | ('DES' in string):
             position_set.add('DH')
-        if 'U' in string:
+        if ('UT' in string) & ('OUT' not in string):
             position_set.add('UTIL')
         return list(position_set)
 

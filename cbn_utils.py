@@ -27,3 +27,10 @@ def check_list_arg(name='', values=[], allowed_values=[], disallowed_values=[]) 
                 passes = False
                 message += f'"{name}" argument must NOT be from the following list: {disallowed_values}. "{value}" was provided. '
     assert passes, message
+
+
+def strikethrough(x) -> str:
+    result = ''
+    for character in str(x):
+        result += (character + '\u0336')
+    return result

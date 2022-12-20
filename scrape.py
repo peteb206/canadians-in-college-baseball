@@ -1,11 +1,10 @@
 from config import hub_spreadsheet
 from model import School, Page
+from cbn_utils import strikethrough
 import requests
 import pandas as pd
 from datetime import datetime
 import time
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
 
 
 def players():
@@ -39,15 +38,21 @@ def players():
             state = school_series['state'],
             roster_page = Page(url=school_series['roster_link'], session = session)
         )
+
+        players, canadians = list(), list()
         try:
             players = school.players()
-            canadians = [player for player in players if player.canadian]
-            all_canadians += canadians
         except Exception as e:
             print(f'ERROR: {school.name} - {school.roster_page.url} - {str(e)}')
-        print(f'| {str(i + 1).ljust(index_col_length)} | {school.name.ljust(school_col_length)} | {str(len(players)).ljust(players_col_length)} | {str(len(canadians)).ljust(canadians_col_length)} | {school.roster_page.url} {school.roster_page.status}')
+
+        canadians = [player for player in players if player.canadian]
+        if not school.roster_page.redirect: # correct url in Google Sheet
+            all_canadians += canadians
+
         schools_df.at[i, 'success'] = len(players) > 0
-        time.sleep(1)
+        print(f'| {str(i + 1).ljust(index_col_length)} | {school.name.ljust(school_col_length)} | {strikethrough(len(players)).ljust(players_col_length + (1 if len(players) < 10 else 2 if len(players) < 100 else 3)) if school.roster_page.redirect else str(len(players)).ljust(players_col_length)} | {strikethrough(len(canadians)).ljust(canadians_col_length + (1 if len(canadians) < 10 else 2)) if school.roster_page.redirect else str(len(canadians)).ljust(canadians_col_length)} | {school.roster_page.url} {school.roster_page.status}')
+        time.sleep(0.8)
+
     print(border_row)
 
     new_players_df = pd.DataFrame([canadian.to_dict() for canadian in all_canadians]).drop('canadian', axis=1)
