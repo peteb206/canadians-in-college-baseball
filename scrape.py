@@ -48,8 +48,8 @@ def players():
         canadians = [player for player in players if player.canadian]
         if not school.roster_page.redirect: # correct url in Google Sheet
             all_canadians += canadians
+            schools_df.at[i, 'success'] = len(players) > 0
 
-        schools_df.at[i, 'success'] = len(players) > 0
         print(f'| {str(i + 1).ljust(index_col_length)} | {school.name.ljust(school_col_length)} | {strikethrough(len(players)).ljust(players_col_length + (1 if len(players) < 10 else 2 if len(players) < 100 else 3)) if school.roster_page.redirect else str(len(players)).ljust(players_col_length)} | {strikethrough(len(canadians)).ljust(canadians_col_length + (1 if len(canadians) < 10 else 2)) if school.roster_page.redirect else str(len(canadians)).ljust(canadians_col_length)} | {school.roster_page.url} {school.roster_page.status}')
         time.sleep(0.8)
 

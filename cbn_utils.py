@@ -30,7 +30,4 @@ def check_list_arg(name='', values=[], allowed_values=[], disallowed_values=[]) 
 
 
 def strikethrough(x) -> str:
-    result = ''
-    for character in str(x):
-        result += (character + '\u0336')
-    return result
+    return ''.join([character + '\u0336' for character in str(x)])
