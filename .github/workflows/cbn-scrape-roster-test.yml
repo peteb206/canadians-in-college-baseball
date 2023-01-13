@@ -18,4 +18,4 @@ jobs:
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
             run: |
-               python -c 'from actions import players; players(fetch = True, update_google_sheet = False)'
+               python -c 'from actions import players; players(fetch = True, update_google_sheet = True, copy_to_production = False)'

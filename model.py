@@ -1,4 +1,4 @@
-from cbn_utils import check_arg_type, check_string_arg, check_list_arg
+import cbn_utils
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -7,17 +7,25 @@ import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
-requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
+ssl._create_default_https_context = ssl._create_unverified_context
+urllib3 = requests.packages.urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+session = requests.Session()
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'X-Requested-With': 'XMLHttpRequest'
+}
+timeout = 10
 
 class GoogleSpreadsheet:
     def __init__(self, keyfile = ''):
         # Check types
-        check_arg_type(name = 'keyfile', value = keyfile, value_type = str)
+        cbn_utils.check_arg_type(name = 'keyfile', value = keyfile, value_type = str)
 
         # Check values
-        check_string_arg(name = 'keyfile', value = keyfile, disallowed_values = [''])
+        cbn_utils.check_string_arg(name = 'keyfile', value = keyfile, disallowed_values = [''])
 
         # authorize the clientsheet 
         self.client = gspread.authorize(
@@ -42,17 +50,14 @@ class Page:
     page.get_table()
     '''
 
-    def __init__(self, url = '', session = None):
+    def __init__(self, url = ''):
         # Check types
-        check_arg_type(name = 'url', value = url, value_type = str)
-        if session != None:
-            check_arg_type(name = 'session', value = session, value_type = requests.Session)
+        cbn_utils.check_arg_type(name = 'url', value = url, value_type = str)
 
         # Check values
-        check_string_arg(name = 'url', value = url, disallowed_values = [''])
+        cbn_utils.check_string_arg(name = 'url', value = url, disallowed_values = [''])
 
         self.url = url
-        self.session = requests.Session() if session == None else session
         self.redirect = False
         self.status = u'\u2717'
         self.__html = ''
@@ -64,16 +69,11 @@ class Page:
 
     def __fetch_roster_page__(self):
         if self.url:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-            timeout = 10
             try: # send verified request
-                return self.session.get(self.url, headers = headers, timeout = timeout, verify = True)
+                return session.get(self.url, headers = headers, timeout = timeout, verify = True)
             except requests.exceptions.SSLError: # send unverified request
                 print(f'WARNING: sending unverified request to {self.url}')
-                return self.session.get(self.url, headers = headers, timeout = timeout, verify = False)
+                return session.get(self.url, headers = headers, timeout = timeout, verify = False)
 
     def html(self, new_request = False):
         if (self.url != '') & (new_request | (self.__html == '')):
@@ -133,7 +133,7 @@ class Page:
         if soup.find('table'):
             self.dfs = pd.read_html(self.__html)
             for df in self.dfs:
-                if len(self.df.index) < len(df.index):
+                if len(df.index) > max(len(self.df.index), 8): # Assuming a baseball roster should have 9+ players
                     self.df = df
         elif soup.find('div', {'class': 's-person-card'}):
             self.df = self.__parse_sidearm_cards__(soup)
@@ -153,20 +153,17 @@ class Page:
 class School:
     def __init__(self, name = '', league = '', division = '', state = '', roster_page: Page = None):
         # Check types
-        check_arg_type(name = 'name', value = name, value_type = str)
-        check_arg_type(name = 'league', value = league, value_type = str)
-        check_arg_type(name = 'division', value = division, value_type = str)
-        check_arg_type(name = 'state', value = state, value_type = str)
-        check_arg_type(name = 'roster_page', value = roster_page, value_type = Page)
+        cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
+        cbn_utils.check_arg_type(name = 'league', value = league, value_type = str)
+        cbn_utils.check_arg_type(name = 'division', value = division, value_type = str)
+        cbn_utils.check_arg_type(name = 'state', value = state, value_type = str)
+        cbn_utils.check_arg_type(name = 'roster_page', value = roster_page, value_type = Page)
 
         # Check values
-        check_string_arg(name = 'name', value = name, disallowed_values = [''])
-        check_string_arg(name = 'league', value = league, allowed_values = ['NCAA', 'NAIA', 'JUCO', 'CCCAA', 'NWAC', 'USCAA'])
-        check_string_arg(name = 'division', value = division, allowed_values = ['', '1', '2', '3'])
-        check_string_arg(name = 'state', value = state, allowed_values = ['AL', 'AK', 'AR', 'AZ', 'BC', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'GA', 'HI',
-                                                                          'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD', 'ME', 'MI', 'MN', 'MO',
-                                                                          'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ', 'NM', 'NV', 'NY', 'OH', 'OK', 'OR',
-                                                                          'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT', 'WA', 'WI', 'WV'])
+        cbn_utils.check_string_arg(name = 'name', value = name, disallowed_values = [''])
+        cbn_utils.check_string_arg(name = 'league', value = league, allowed_values = ['NCAA', 'NAIA', 'JUCO', 'CCCAA', 'NWAC', 'USCAA'])
+        cbn_utils.check_string_arg(name = 'division', value = division, allowed_values = ['', '1', '2', '3'])
+        cbn_utils.check_string_arg(name = 'state', value = state, allowed_values = ['AL', 'AK', 'AR', 'AZ', 'BC', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'GA', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ', 'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT', 'WA', 'WI', 'WV'])
 
         self.name = name
         self.league = league
@@ -272,7 +269,7 @@ class School:
                 string2 = string2.split('(')[0].strip() # Text within parentheses is not helpful
 
         formatted = False
-        for province_name, province_abbreviations in province_strings.items():
+        for province_name, province_abbreviations in cbn_utils.province_strings.items():
             for province_abbreviation in [province_name] + province_abbreviations:
                 if province_abbreviation.lower() in string2.lower(): # Ex. ', on' in burlington, on / nelson high school
                     city = re.split(province_abbreviation, string2, flags=re.IGNORECASE)[0]
@@ -327,7 +324,7 @@ class School:
 
                         # Set hometown column
                         else: # elif ('home' in key) | ('province' in key):
-                            if (any(canada_string.lower() in value_str.lower() for canada_string in canada_strings)) & (~any(ignore_string in value_str.lower() for ignore_string in ignore_strings)):
+                            if (any(canada_string.lower() in value_str.lower() for canada_string in cbn_utils.canada_strings)) & (~any(ignore_string in value_str.lower() for ignore_string in cbn_utils.ignore_strings)):
                                 new_dict['city'], new_dict['province'] = self.__format_player_hometown__(value_str, debug=debug)
                                 new_dict['canadian'] = True
                 new_dict['school'] = self
@@ -336,33 +333,29 @@ class School:
         return self.__players
 
 class Player:
-    def __init__(self, last_name = '', first_name = '', positions = [], bats = '', throws = '', year = '', school: School = None, city = '',
-                 province = '', canadian: bool = False, stats_link = ''):
+    def __init__(self, last_name = '', first_name = '', positions = [], bats = '', throws = '', year = '', school: School = None, city = '', province = '', canadian: bool = False, stats_id = ''):
         # Check types
-        check_arg_type(name = 'last_name', value = last_name, value_type = str)
-        check_arg_type(name = 'first_name', value = first_name, value_type = str)
-        check_arg_type(name = 'positions', value = positions, value_type = list)
-        check_arg_type(name = 'bats', value = bats, value_type = str)
-        check_arg_type(name = 'throws', value = throws, value_type = str)
-        check_arg_type(name = 'year', value = year, value_type = str)
-        check_arg_type(name = 'school', value = school, value_type = School)
-        check_arg_type(name = 'city', value = city, value_type = str)
-        check_arg_type(name = 'province', value = province, value_type = str)
-        check_arg_type(name = 'canadian', value = canadian, value_type = bool)
-        check_arg_type(name = 'stats_link', value = stats_link, value_type = str)
+        cbn_utils.check_arg_type(name = 'last_name', value = last_name, value_type = str)
+        cbn_utils.check_arg_type(name = 'first_name', value = first_name, value_type = str)
+        cbn_utils.check_arg_type(name = 'positions', value = positions, value_type = list)
+        cbn_utils.check_arg_type(name = 'bats', value = bats, value_type = str)
+        cbn_utils.check_arg_type(name = 'throws', value = throws, value_type = str)
+        cbn_utils.check_arg_type(name = 'year', value = year, value_type = str)
+        cbn_utils.check_arg_type(name = 'school', value = school, value_type = School)
+        cbn_utils.check_arg_type(name = 'city', value = city, value_type = str)
+        cbn_utils.check_arg_type(name = 'province', value = province, value_type = str)
+        cbn_utils.check_arg_type(name = 'canadian', value = canadian, value_type = bool)
+        cbn_utils.check_arg_type(name = 'stats_id', value = stats_id, value_type = str)
 
         # Check values
-        check_string_arg(name = 'last_name', value = last_name, disallowed_values = [''])
-        check_string_arg(name = 'first_name', value = first_name, disallowed_values = [''])
-        check_list_arg(name = 'positions', values = positions, allowed_values = ['', 'P', 'C', '1B', '2B', '3B', 'SS', 'INF', 'LF', 'CF', 'RF', 'OF',
-                                                                                'DH', 'UTIL'])
-        check_string_arg(name = 'bats', value = bats, allowed_values = ['', 'R', 'L', 'B'])
-        check_string_arg(name = 'throws', value = throws, allowed_values = ['', 'R', 'L', 'B'])
-        check_string_arg(name = 'year', value = year, allowed_values = ['', 'Redshirt', 'Freshman', 'Sophomore', 'Junior', 'Senior'])
-        # check_string_arg(name = 'school', value = school, disallowed_values = [None])
-        check_string_arg(name = 'province', value = province, allowed_values = ['', 'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick',
-                                                                                'Newfoundland & Labrador', 'Nova Scotia', 'Ontario',
-                                                                                'Prince Edward Island', 'Quebec', 'Saskatchewan'])
+        cbn_utils.check_string_arg(name = 'last_name', value = last_name, disallowed_values = [''])
+        cbn_utils.check_string_arg(name = 'first_name', value = first_name, disallowed_values = [''])
+        cbn_utils.check_list_arg(name = 'positions', values = positions, allowed_values = ['', 'P', 'C', '1B', '2B', '3B', 'SS', 'INF', 'LF', 'CF', 'RF', 'OF', 'DH', 'UTIL'])
+        cbn_utils.check_string_arg(name = 'bats', value = bats, allowed_values = ['', 'R', 'L', 'B'])
+        cbn_utils.check_string_arg(name = 'throws', value = throws, allowed_values = ['', 'R', 'L', 'B'])
+        cbn_utils.check_string_arg(name = 'year', value = year, allowed_values = ['', 'Redshirt', 'Freshman', 'Sophomore', 'Junior', 'Senior'])
+        # cbn_utils.check_string_arg(name = 'school', value = school, disallowed_values = [None])
+        cbn_utils.check_string_arg(name = 'province', value = province, allowed_values = ['', 'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick', 'Newfoundland & Labrador', 'Nova Scotia', 'Ontario', 'Prince Edward Island', 'Quebec', 'Saskatchewan'])
 
         self.last_name = last_name
         self.first_name = first_name
@@ -374,7 +367,11 @@ class Player:
         self.city = city
         self.province = province
         self.canadian = canadian
-        self.stats_link = stats_link
+        self.stats_id = stats_id
+        self.__stats_url = ''
+        self.__batting_stats = list(cbn_utils.stats_labels['batting'].keys())
+        self.__pitching_stats = list(cbn_utils.stats_labels['pitching'].keys())
+        self.__stats = {stat: 0 for stat in self.__batting_stats + self.__pitching_stats}
 
     def __repr__(self):
         return str(self.to_dict())
@@ -394,67 +391,60 @@ class Player:
             'division': self.school.division if self.school != None else '',
             'state': self.school.state if self.school != None else '',
             'canadian': self.canadian,
-            'stats_link': self.stats_link
+            'stats_id': self.stats_id
         }
 
-# global variables
-city_strings = {
-    'Quebec': ['montreal', 'saint-hilaire']
-}
+    def stats(self, config_values):
+        if self.stats_id != '':
+            stat_dict = self.__stats
+            if self.school.league == 'NCAA':
+                ncaa_base_url = f'https://stats.ncaa.org/player/index?id={config_values["NCAA_STAT_YEAR"]}&stats_player_seq='
+                for i, stat_category_id in enumerate([config_values['NCAA_BATTING_STAT_ID'], config_values['NCAA_PITCHING_STAT_ID']]):
+                    self.__stats_url = f'{ncaa_base_url}{self.stats_id}&year_stat_category_id={stat_category_id}'
+                    html = session.get(self.__stats_url, headers = headers, timeout = timeout).text
+                    df = pd.read_html(html)[2]
+                    new_header = df.iloc[1] # grab the first row for the header
+                    df = df[2:] # take the data less the header row
+                    df.columns = new_header # set the header row as the df header
+                    df = df[df['Year'] == config_values['ACADEMIC_YEAR']]
+                    if len(df.index) == 1:
+                        if i == 0:
+                            df.rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG'}, axis = 1, inplace = True)
+                            df = df[self.__batting_stats]
+                        else:
+                            df.rename({'App': 'APP', 'H': 'HA', 'SO': 'K'}, axis = 1, inplace = True)
+                            df = df[self.__pitching_stats]
+                        stat_dict = stat_dict | df.fillna(0).to_dict(orient = 'records')[0]
+            else:
+                if self.school.league == 'NAIA':
+                    self.__stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                elif self.school.league == 'JUCO':
+                    self.__stats_url = f'https://www.njcaa.org/sports/bsb/{config_values["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.stats_id}?view=profile'
+                elif self.school.league == 'USCAA':
+                    self.__stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                req = session.get(self.__stats_url, headers = headers, timeout = timeout)
+                for df in pd.read_html(req.text):
+                    if 'Statistics category' in df.columns:
+                        pitching_stat_index = df[df['Statistics category'] == 'Appearances'].index.to_list()[0]
+                        batting_df = df.head(pitching_stat_index).set_index('Statistics category')
+                        batting_df.rename({'Games': 'G', 'At Bats': 'AB', 'Runs': 'R', 'Hits': 'H', 'Doubles': '2B', 'Triples': '3B', 'Home Runs': 'HR', 'Runs Batted In': 'RBI', 'Stolen Bases': 'SB', 'Batting Average': 'AVG', 'On Base Percentage': 'OBP', 'Slugging Percentage': 'SLG'}, inplace = True)
+                        batting_stat_dict = batting_df.filter(items = self.__batting_stats, axis = 0)['Overall'].replace('-', '0').to_dict()
 
-province_strings = {
-    'Alberta': ['alberta', ', alta.', ', ab', 'a.b.'],
-    'British Columbia': ['british columbia', 'b.c', ' bc'],
-    'Manitoba': ['manitoba', ', mb', ', man.'],
-    'New Brunswick': ['new brunswick', ', nb', 'n.b.'],
-    'Newfoundland & Labrador': ['newfoundland', 'nfld', ', nl'],
-    'Nova Scotia': ['nova scotia', ', ns', 'n.s.' ],
-    'Ontario': [', ontario', ', on', ',on', '(ont)'],
-    'Prince Edward Island': ['prince edward island', 'p.e.i.'],
-    'Quebec': ['quebec', 'q.c.', ', qu', ', que.', ', qb'],
-    'Saskatchewan': ['saskatchewan', ', sask', ', sk', 's.k.']
-}
+                        pitching_df = df.tail(len(df.index) - pitching_stat_index).set_index('Statistics category')
+                        pitching_df.rename({'Appearances': 'APP', 'Games Started': 'GS', 'Innings Pitched': 'IP', 'Wins': 'W', 'Losses': 'L', 'Earned Runs': 'ER', 'Hits': 'HA', 'Walks': 'BB', 'Earned Run Average': 'ERA', 'Saves': 'SV', 'Strikeouts': 'K'}, inplace = True)
+                        pitching_stat_dict = pitching_df.filter(items = self.__pitching_stats, axis = 0)['Overall'].replace('-', '0').to_dict()
 
-country_strings = {
-    'Canada': ['canada', ', can']
-}
+                        stat_dict = stat_dict | batting_stat_dict | pitching_stat_dict
+                        break
+            # Format to integers and rounded decimals
+            for key, value in stat_dict.items():
+                if key in ['AVG', 'OBP', 'SLG', 'IP', 'ERA']:
+                    stat_dict[key] = float(value)
+                else:
+                    stat_dict[key] = int(value)
+            stat_dict['OPS'] = stat_dict['OBP'] + stat_dict['SLG']
+            self.__stats = stat_dict
+        return self.__stats
 
-canada_strings = list(sum(city_strings.values(), []))
-canada_strings.extend(sum(province_strings.values(), []))
-canada_strings.extend(sum(country_strings.values(), []))
-
-hometown_conversion_dict = {
-    'ab': 'Alberta',
-    'bc': 'British Columbia',
-    'mb': 'Manitoba',
-    'nb': 'New Brunswick',
-    'nl': 'Newfoundland & Labrador',
-    'ns': 'Nova Scotia',
-    'on': 'Ontario',
-    'ont': 'Ontario',
-    'ont.': 'Ontario',
-    'pei': 'Prince Edward Island',
-    'qc': 'Quebec',
-    'qu': 'Quebec',
-    'sk': 'Saskatchewan'
-}
-for province, strings in province_strings.items():
-    for string in strings:
-        hometown_conversion_dict[re.sub(r'[^a-zA-Z]+', '', string)] = province
-
-ignore_strings = [
-    'canada college',
-    'west canada valley',
-    'la canada',
-    'australia',
-    'mexico',
-    'abac',
-    'newfoundland, pa',
-    'canada, minn',
-    'new brunswick, n',
-    'a.b. miller',
-    ', nsw',
-    'las vegas, nb',
-    'ontario, california',
-    ', queens'
-]
+    def stats_url(self):
+        return self.__stats_url
