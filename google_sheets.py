@@ -8,6 +8,7 @@ import pandas as pd
 division_list = [
     ('NCAA', '1', 'NCAA: Division 1'),
     ('NCAA', '2', 'NCAA: Division 2'),
+    ('NCAA', '3', 'NCAA: Division 3'),
     ('NAIA', '', 'NAIA'),
     ('JUCO', '1', 'JUCO: Division 1'),
     ('JUCO', '2', 'JUCO: Division 2'),

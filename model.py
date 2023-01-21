@@ -151,6 +151,11 @@ class Page:
 
 
 class School:
+    '''
+    from model import School, Page
+    school = School(name = 'U.S. Air Force Academy', league = 'NCAA', division = '1', state = 'CO', roster_page = Page(url = 'https://goairforcefalcons.com/sports/baseball/roster/2023'))
+    school.players()
+    '''
     def __init__(self, name = '', league = '', division = '', state = '', roster_page: Page = None):
         # Check types
         cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
