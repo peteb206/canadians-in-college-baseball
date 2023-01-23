@@ -145,10 +145,10 @@ def stats():
 
         try:
             player_stats = player.stats(config_values)
-            players_df.at[i, 'success'] = True
             print(f'| {str(i + 1).ljust(index_col_length)} | {player.stats_url().ljust(stat_url_col_length)} | {" | ".join([str(stat).ljust(stat_col_length) for stat in player_stats.values()])} |')
             player_stats['stats_id'] = player.stats_id
             stats.append(player_stats)
+            players_df.at[i, 'success'] = True
         except Exception as e:
             print(f'ERROR: {player.first_name} {player.last_name} - {player.stats_url()} - {str(e)}')
         time.sleep(0.8)

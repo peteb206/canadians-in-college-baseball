@@ -155,7 +155,7 @@ def update_stats_sheet(copy_to_production = False):
         df_split_div = players_df[(players_df['league'] == league) & (players_df['division'] == division)]
         for i, stat in enumerate(batting_stats + pitching_stats):
             avg_flg = stat in ['AVG', 'OBP', 'SLG', 'OPS']
-            df_filtered = df_split_div.copy()
+            df_filtered = df_split_div.rename({'positions': 'Position'}, axis = 1)
             ascending_flg = False
             if avg_flg == True:
                 df_filtered = df_filtered[(df_filtered['AB'] >= 30) & (df_filtered[stat] > 0)] # At least 30 At Bats
@@ -174,7 +174,6 @@ def update_stats_sheet(copy_to_production = False):
                 df_filtered['tied'] = df_filtered['Rank'] == df_filtered['Rank'].shift()
                 df_filtered['Rank'] = df_filtered.apply(lambda row: None if row['tied'] else row['Rank'], axis = 1)
                 df_filtered['Name'] = df_filtered.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
-                df_filtered['Position'] = df_filtered['positions'].apply(lambda x: '/'.join(x))
                 df_filtered = df_filtered[['Rank', 'Name', 'Position', 'School', stat]]
                 stat_label = (batting_labels + pitching_labels)[i]
                 if stat == 'APP':
