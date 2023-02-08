@@ -12,3 +12,6 @@ def stats(fetch = False, update_google_sheet = False, copy_to_production = True)
         scrape.stats()
     if update_google_sheet:
         update_stats_sheet(copy_to_production = copy_to_production)
+
+if __name__ == '__main__':
+    stats(fetch = False, update_google_sheet = True)

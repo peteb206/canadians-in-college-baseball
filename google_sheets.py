@@ -174,8 +174,8 @@ def update_stats_sheet(copy_to_production = False):
                 df_filtered['tied'] = df_filtered['Rank'] == df_filtered['Rank'].shift()
                 df_filtered['Rank'] = df_filtered.apply(lambda row: None if row['tied'] else row['Rank'], axis = 1)
                 df_filtered['Name'] = df_filtered.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
-                df_filtered = df_filtered[['Rank', 'Name', 'Position', 'School', stat]]
                 stat_label = (batting_labels + pitching_labels)[i]
+                df_filtered = df_filtered[['Rank', 'Name', 'Position', 'School', stat]]
                 if stat == 'APP':
                     df_filtered.rename({stat: 'G'}, inplace = True)
 

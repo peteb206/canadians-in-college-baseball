@@ -415,6 +415,7 @@ class Player:
                     if len(df.index) == 1:
                         if i == 0:
                             df.rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG'}, axis = 1, inplace = True)
+                            df['OPS'] = 0.0
                             df = df[self.__batting_stats]
                         else:
                             df.rename({'App': 'APP', 'H': 'HA', 'SO': 'K'}, axis = 1, inplace = True)
@@ -425,6 +426,10 @@ class Player:
                     self.__stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 elif self.school.league == 'JUCO':
                     self.__stats_url = f'https://www.njcaa.org/sports/bsb/{config_values["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.stats_id}?view=profile'
+                elif self.school.league == 'CCCAA':
+                    self.__stats_url = f'https://www.cccaasports.org/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                elif self.school.league == 'NWAC':
+                    self.__stats_url = f'https://nwacsports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 elif self.school.league == 'USCAA':
                     self.__stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 req = session.get(self.__stats_url, headers = headers, timeout = timeout)
