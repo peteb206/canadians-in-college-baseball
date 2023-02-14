@@ -169,7 +169,7 @@ def stats():
     existing_stats_df = pd.merge(existing_stats_df, players_df, how = 'left', on = 'stats_id')
     combined_stats_df = pd.concat([existing_stats_df[~existing_stats_df['success'].fillna(False)], new_stats_df], ignore_index = True)
     combined_stats_df[['AVG', 'OBP', 'SLG', 'OPS']] = combined_stats_df[['AVG', 'OBP', 'SLG', 'OPS']].round(3)
-    combined_stats_df['ERA'] = combined_stats_df.apply(lambda row: (99.99 if row['ERA'] > 100 else row['ERA']).round(2), axis = 1)
+    combined_stats_df['ERA'] = combined_stats_df.apply(lambda row: 99.99 if row['ERA'] > 100 else row['ERA'], axis = 1).round(2)
     combined_stats_df['IP'] = combined_stats_df['IP'].round(1)
     combined_stats_df.sort_values(by = 'stats_id', inplace = True)
 

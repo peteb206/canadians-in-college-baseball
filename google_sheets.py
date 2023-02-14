@@ -105,6 +105,7 @@ def update_canadians_sheet(copy_to_production = False):
         year_spreadsheet = google_spreadsheets.spreadsheet(name = f'Canadians in College {config_values["YEAR"]}')
         year_worksheet = year_spreadsheet.worksheet(config_values['YEAR'])
         copy_and_paste_sheet(year_spreadsheet, canadians_in_college_worksheet, year_worksheet)
+        resize_columns(year_spreadsheet, year_worksheet, {'Name': 160, 'Position': 81, 'School': 295, 'State': 40, 'Hometown': 340})
 
     print('Google sheet updated with {} players...'.format(str(len(players_df.index))))
 
@@ -215,6 +216,7 @@ def update_stats_sheet(copy_to_production = False):
         year_spreadsheet = google_spreadsheets.spreadsheet(name = f'Canadians in College Stats: {config_values["YEAR"]}')
         year_worksheet = year_spreadsheet.worksheet(config_values['YEAR'])
         copy_and_paste_sheet(year_spreadsheet, canadians_in_college_stats_worksheet, year_worksheet)
+        resize_columns(year_spreadsheet, year_worksheet, {'Rank': 50, 'Name': 160, 'Position': 75, 'School': 295, 'Stat': 280})
     print('Done!')
 
 def clear_sheets(spreadsheet, worksheets):
