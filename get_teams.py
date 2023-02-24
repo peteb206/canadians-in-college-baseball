@@ -2,7 +2,6 @@ from config import hub_spreadsheet, config_values
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-import json
 from urllib.parse import urlparse
 
 session = requests.Session()
@@ -14,11 +13,6 @@ headers = {
 # Year format
 this_year = int(config_values['YEAR'])
 last_year = this_year - 1
-two_years_ago = last_year - 1
-year_conversion_dict = {
-    f'{str(last_year)[-2:]}': f'{str(this_year)[-2:]}',
-    f'{str(two_years_ago)[-2:]}': f'{str(last_year)[-2:]}'
-}
 
 # Fetch existing schools to dataframe
 school_cols = ['id', 'name', 'league', 'division', 'state', 'roster_url']
@@ -28,93 +22,55 @@ old_schools_df['site_domain'] = old_schools_df['roster_url'].apply(lambda x: url
 old_schools_df = old_schools_df[old_schools_df['name'] != ''].reset_index(drop = True)
 old_schools_df = old_schools_df[school_cols + ['site_domain']]
 
-def year_convert(url: str) -> str:
-    for old, new in year_conversion_dict.items():
-        url = url.replace(old, new)
-    return url
-
-def get_college_baseball_hub_auth_token() -> tuple:
-    req = session.get('https://www.collegebaseballhub.com/d1')
-    soup = BeautifulSoup(req.text, 'html.parser')
-    wix_javascript = soup.find('script', {'id': 'wix-viewer-model'})
-    if wix_javascript != None:
-        wix_dict = json.loads(wix_javascript.text)
-        app_id = wix_dict['siteFeaturesConfigs']['dynamicPages']['prefixToRouterFetchData']['school']['urlData']['appDefinitionId']
-        req = session.get('https://www.collegebaseballhub.com/_api/v2/dynamicmodel')
-        return wix_dict['siteFeaturesConfigs']['dataWixCodeSdk']['gridAppId'], json.loads(req.text)['apps'][app_id]['instance']
-
-app_id, auth_token = get_college_baseball_hub_auth_token()
-
-def get_college_baseball_hub_schools(division: str = 'D1') -> pd.DataFrame:
-    body = {
-        'collectionName': 'Division1',
-        'dataQuery': {
-            'filter': {
-                '$and': [
-                    {
-                        'orderId': {
-                            '$gt': 0
-                        }
-                    }, {
-                        'division': {
-                            '$eq': division
-                        }
-                    }, {
-                        'show': {
-                            '$eq': True
-                        }
-                    }, {
-                        '$and': []
-                    }, {
-                        '$and': []
-                    }, {
-                        '$and': []
-                    }, {
-                        '$and': []
-                    }
-                ]
-            },
-            'sort': [
-                {
-                    'fieldName': 'orderId',
-                    'order': 'ASC'
-                }
-            ],
-            'paging': {
-                'offset': 0,
-                'limit': 500
-            }
-        },
-        'options': {},
-        'includeReferencedItems': [],
-        'segment': 'LIVE',
-        'appId': app_id
-    }
-    req = session.post('https://www.collegebaseballhub.com/_api/cloud-data/v1/wix-data/collections/query', json = body, headers = headers | {'authorization': auth_token})
-    schools = list()
-    for school in json.loads(req.text)['items']:
-        school_dict = {k: school[k] for k in ['shortname', 'state', 'division', 'link'] if k in school}
-        school_dict['name'] = school_dict.pop('shortname')
-        # school_dict['site_domain'] = site_domain(school_dict.pop('link'))
-        if division == 'NAIA':
-            school_dict['league'], school_dict['division'] = division, ''
-        else:
-            school_dict['league'], school_dict['division'] = 'NCAA', school_dict['division'][-1]
-        schools.append(school_dict)
-    df = pd.merge(
-        pd.DataFrame(schools),
+def compare_and_join(df: pd.DataFrame):
+    df['name'] = df['name'].apply(lambda x: x.split('(')[0].strip())
+    df = df.merge(
         old_schools_df,
         how = 'left',
-        on = ['name', 'league', 'state'], # 'site_domain',
+        on = ['id', 'league'],
         suffixes = ['', '_old']
     )
     return df[school_cols].fillna('')
 
-def get_ncaa_schools(division: str = '1') -> pd.DataFrame:
-    return get_college_baseball_hub_schools(division = f'D{division}')
+def get_ncaa_schools() -> pd.DataFrame:
+    df = pd.read_json('https://web3.ncaa.org/directory/api/directory/memberList?type=12&sportCode=MBA')
+    df = df[['orgId', 'nameOfficial', 'division', 'athleticWebUrl', 'memberOrgAddress']]
+    df['id'] = df['orgId'].astype(str)
+    df['name'] = df['nameOfficial']
+    df['league'] = 'NCAA'
+    df['division'] = df['division'].astype(str)
+    df['state'] = df['memberOrgAddress'].apply(lambda x: x['state'])
+    df['site_domain'] = df['athleticWebUrl'].apply(lambda x: x.replace('www.', ''))
+    return compare_and_join(df.sort_values(by = ['division', 'name'], ignore_index = True))
+
+def get_other_schools(league: str) -> pd.DataFrame:
+    url = ''
+    if league == 'NAIA':
+        url = f'https://naiastats.prestosports.com/sports/bsb/{str(this_year - 1)}-{str(this_year)[-2:]}/teams'
+    elif league == 'CCCAA':
+        url = f'https://www.cccaasports.org/sports/bsb/{str(this_year - 1)}-{str(this_year)[-2:]}/teams'
+    elif league == 'NWAC':
+        url = f'https://nwacsports.com/sports/bsb/{str(this_year - 1)}-{str(this_year)[-2:]}/teams'
+    elif league == 'USCAA':
+        url = f'https://uscaa.prestosports.com/sports/bsb/{str(this_year - 1)}-{str(this_year)[-2:]}/teams'
+    else:
+        return pd.DataFrame()
+    req = session.get(url, headers = headers)
+    soup = BeautifulSoup(req.text, 'html.parser')
+    schools = list()
+    for i, tr in enumerate(soup.find('table').find_all('tr')):
+        if i > 0: # skip header row
+            td = tr.find_all('td')[1]
+            a = td.find('a')
+            if a:
+                schools.append({'id': a['href'].split('/')[-1], 'name': a.text, 'league': league})
+            else:
+                name = td.text.strip()
+                schools.append({'id': name.lower().remove(' ', ''), 'name': name, 'league': league})
+    return compare_and_join(pd.DataFrame(schools))
 
 def get_naia_schools() -> pd.DataFrame:
-    return get_college_baseball_hub_schools(division = 'NAIA')
+    return get_other_schools('NAIA')
 
 def get_juco_schools() -> pd.DataFrame:
     req = session.get('https://www.njcaa.org/sports/bsb/teams', headers = headers)
@@ -127,40 +83,7 @@ def get_juco_schools() -> pd.DataFrame:
                 school = li.find('a', {'class': 'college-name'})
                 if school != None:
                     schools.append({'id': school['href'].split('/')[-1], 'name': school.text, 'league': 'JUCO', 'division': str(division)})
-    df = pd.merge(
-        pd.DataFrame(schools),
-        old_schools_df,
-        how = 'left',
-        on = ['name', 'league'],
-        suffixes = ['', '_old']
-    )
-    return df[school_cols].fillna('')
-
-def get_other_schools(league: str) -> pd.DataFrame:
-    url = ''
-    if league == 'CCCAA':
-        url = f'https://www.cccaasports.org/sports/bsb/{str(last_year)}-{str(this_year)[-2:]}/teams'
-    elif league == 'NWAC':
-        url = f'https://nwacsports.com/sports/bsb/{str(last_year)}-{str(this_year)[-2:]}/teams'
-    elif league == 'USCAA':
-        url = f'https://uscaa.prestosports.com/sports/bsb/{str(last_year)}-{str(this_year)[-2:]}/teams'
-    if url == '':
-        return pd.DataFrame()
-    req = session.get(url, headers = headers)
-    soup = BeautifulSoup(req.text, 'html.parser')
-    schools = list()
-    for i, tr in enumerate(soup.find('table').find_all('tr')):
-        if i > 0:
-            school = tr.find_all('td')[1].find('a')
-            schools.append({'id': school['href'].split('/')[-1], 'name': school.text, 'league': league})
-    df = pd.merge(
-        pd.DataFrame(schools),
-        old_schools_df,
-        how = 'left',
-        on = ['name', 'league'],
-        suffixes = ['', '_old']
-    )
-    return df[school_cols].fillna('')
+    return compare_and_join(pd.DataFrame(schools))
 
 def get_cccaa_schools() -> pd.DataFrame:
     return get_other_schools('CCCAA')
@@ -175,9 +98,7 @@ def get_schools() -> pd.DataFrame:
     # Fetch new schools to dataframe
     schools_df = pd.concat(
         [
-            get_ncaa_schools('1'),
-            get_ncaa_schools('2'),
-            get_ncaa_schools('3'),
+            get_ncaa_schools(),
             get_naia_schools(),
             get_juco_schools(),
             get_cccaa_schools(),
