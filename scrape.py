@@ -1,4 +1,4 @@
-from config import hub_spreadsheet, config_values
+from google_sheets import hub_spreadsheet, config
 from cbn_utils import stats_labels
 from model import School, Page, Player
 from cbn_utils import strikethrough
@@ -144,7 +144,7 @@ def stats():
         )
 
         try:
-            player_stats = player.stats(config_values)
+            player_stats = player.stats()
             print(f'| {str(i + 1).ljust(index_col_length)} | {player.stats_url().ljust(stat_url_col_length)} | {" | ".join([str(stat).ljust(stat_col_length) for stat in player_stats.values()])} |')
             player_stats['stats_id'] = player.stats_id
             stats.append(player_stats)

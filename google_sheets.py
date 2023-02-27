@@ -1,10 +1,143 @@
-from config import google_spreadsheets, hub_spreadsheet, config_values
-from cbn_utils import stats_labels
+import cbn_utils
+import os
+import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 import time
 from datetime import datetime
 import re
 import pandas as pd
+class GoogleSpreadsheet:
+    def __init__(self):
+        # get API key
+        self.__set_api_key('canadians-in-college-baseball-32cfc8392a02.json')
 
+        # authorize the clientsheet
+        self.__client: gspread.Client = gspread.authorize(
+            ServiceAccountCredentials.from_json_keyfile_dict(
+                json.loads(os.environ['GOOGLE_CLOUD_API_KEY']),
+                [
+                    'https://spreadsheets.google.com/feeds',
+                    'https://www.googleapis.com/auth/drive'
+                ]
+            )
+        )
+
+    def __set_api_key(self, file_name: str):
+        if os.path.isfile(file_name):
+            with open(file_name) as f:
+                os.environ['GOOGLE_CLOUD_API_KEY'] = f.read()
+
+    def spreadsheet(self, name: str = ''):
+        # Check types
+        cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
+
+        return Spreadsheet(client = self.__client, name = name)
+
+class Spreadsheet:
+    def __init__(self, client: gspread.Client, name: str = ''):
+        # Check types
+        cbn_utils.check_arg_type(name = 'spreadsheet', value = client, value_type = gspread.Client)
+        cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
+
+        self.__spreadsheet: gspread.Spreadsheet = client.open(name)
+        print(f'Connected to {name} spreadsheet...')
+
+    def sheet(self, name: str = ''):
+        # Check types
+        cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
+
+        return Sheet(spreadsheet = self.__spreadsheet, name = name)
+
+class Sheet:
+    def __init__(self, spreadsheet: gspread.Spreadsheet, name: str = ''):
+        # Check types
+        cbn_utils.check_arg_type(name = 'spreadsheet', value = spreadsheet, value_type = gspread.Spreadsheet)
+        cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
+
+        self.__sheet: gspread.Worksheet = spreadsheet.worksheet(name)
+        self.__columns = list()
+        self.__values = list()
+
+    def columns(self) -> list:
+        self.__columns = list()
+        columns = self.__sheet.get_values('1:1')
+        if len(columns) == 1:
+            self.__columns = columns[0]
+        return self.__columns
+
+    def to_list(self, include_header = False) -> list[list]:
+        # Check types
+        cbn_utils.check_arg_type(name = 'include_header', value = include_header, value_type = bool)
+
+        self.__values = list()
+        values = self.__sheet.get_all_values()
+        if include_header:
+            self.__values = values
+        elif len(values) > 1:
+            self.__values = values[1:]
+        return self.__values
+
+    def to_dict(self) -> list[dict]:
+        return self.__sheet.get_all_records()
+
+    def to_df(self) -> pd.DataFrame:
+        return pd.DataFrame(self.to_list(), columns = self.columns())
+
+    def delete_row(self, row_number):
+        self.__sheet.delete_rows(row_number)
+
+    def update_data(self, new_data_df: pd.DataFrame, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0):
+        # Check types
+        cbn_utils.check_arg_type(name = 'new_data_df', value = new_data_df, value_type = pd.DataFrame)
+        cbn_utils.check_arg_type(name = 'with_filter', value = with_filter, value_type = bool)
+        cbn_utils.check_arg_type(name = 'freeze_cols', value = freeze_cols, value_type = int)
+
+        # Compare existing and new data
+        existing_data_df = self.to_df()[new_data_df.columns]
+        existing_data_df['row_number'] = existing_data_df.index.to_series() + 2
+        compare_data_df = pd.merge(existing_data_df, new_data_df, how = 'outer', indicator = 'source')
+        change = False
+
+        # Drop rows not found in new data
+        rows_to_delete_df = compare_data_df[compare_data_df['source'] == 'left_only']
+        number_of_rows_to_delete = len(rows_to_delete_df.index)
+        if number_of_rows_to_delete > 0:
+           change = True
+           print(f'Deleting the following {number_of_rows_to_delete} rows:')
+           print(rows_to_delete_df)
+           rows_to_delete_df['row_number'].apply(lambda row_number: self.delete_row(row_number))
+
+        # Add rows not found in existing data
+        rows_to_add_df = compare_data_df[compare_data_df['source'] == 'right_only']
+        number_of_rows_to_add = len(rows_to_add_df.index)
+        if number_of_rows_to_add > 0:
+           change = True
+           print(f'Adding the following {number_of_rows_to_add} rows:')
+           print(rows_to_add_df)
+           self.__sheet.append_rows(rows_to_add_df.values.tolist())
+
+        # Format the sheet
+        if change:
+            self.__sheet.clear_basic_filter() # Remove previous data filter
+            self.__sheet.freeze(rows = 0, cols = 0) # Un-freeze header and columns
+            row_count = len(existing_data_df.index) + number_of_rows_to_add - number_of_rows_to_delete + 1
+            self.__sheet.resize(row_count) # Size so that there are no blank rows
+            if with_filter:
+                self.__sheet.freeze(rows = 1, cols = freeze_cols) # Freeze header and x cols
+                self.__sheet.set_basic_filter(f'1:{row_count}') # Add data filter to first row
+            elif freeze_cols > 0:
+                self.__sheet.freeze(cols = freeze_cols) # Freeze x cols
+            columns = self.columns()
+            self.__sheet.columns_auto_resize(start_column_index = 0, end_column_index = len(columns) - 1) # Resize columns
+            if len(sort_by) > 0:
+                self.__sheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns))
+
+google_spreadsheet = GoogleSpreadsheet()
+hub_spreadsheet = google_spreadsheet.spreadsheet(name = 'Canadians in College Baseball Hub V2')
+config = {x[0]: x[1] for x in hub_spreadsheet.sheet(name = 'Configuration').to_list()}
+
+# TODO: create this by getting unique values from teams list
 division_list = [
     ('NCAA', '1', 'NCAA: Division 1'),
     ('NCAA', '2', 'NCAA: Division 2'),
@@ -21,7 +154,7 @@ division_list = [
 def update_canadians_sheet(copy_to_production = False):
     blank_row = [['', '', '', '', '']]
 
-    coaches_worksheet, players_worksheet, last_run_worksheet = hub_spreadsheet.worksheet('Coaches'), hub_spreadsheet.worksheet('Players'), hub_spreadsheet.worksheet('Last Run')
+    coaches_worksheet, players_worksheet, last_run_worksheet = hub_spreadsheet.sheet('Coaches'), hub_spreadsheet.sheet('Players'), hub_spreadsheet.sheet('Last Run')
     players_worksheet_values = players_worksheet.get_all_values()
     players_df = pd.DataFrame(players_worksheet_values[1:], columns = players_worksheet_values[0], dtype=str) # Read existing values
     players_df = players_df[players_df['last_name'] != ''].rename({'positions': 'Position', 'school': 'School', 'state': 'State'}, axis = 1) # Ignore blank row
@@ -29,7 +162,7 @@ def update_canadians_sheet(copy_to_production = False):
     players_df['Hometown'] = players_df.apply(lambda row: f'{row["city"]}, {row["province"]}' if (row['city'] != '') & (row['province'] != '') else row['city'] if row['city'] != '' else row['province'], axis = 1)
 
     # clear values in sheet
-    canadians_in_college_worksheet = hub_spreadsheet.worksheet('Canadians in College')
+    canadians_in_college_worksheet = hub_spreadsheet.sheet('Canadians in College')
     clear_sheets(hub_spreadsheet, [canadians_in_college_worksheet])
 
     # initialize summary data
@@ -102,8 +235,8 @@ def update_canadians_sheet(copy_to_production = False):
 
     # Copy sheet from Hub to Shared sheet
     if copy_to_production:
-        year_spreadsheet = google_spreadsheets.spreadsheet(name = f'Canadians in College {config_values["YEAR"]}')
-        year_worksheet = year_spreadsheet.worksheet(config_values['YEAR'])
+        year_spreadsheet = google_spreadsheet.sheet(name = f'Canadians in College {config["YEAR"]}')
+        year_worksheet = year_spreadsheet.sheet(config['YEAR'])
         copy_and_paste_sheet(year_spreadsheet, canadians_in_college_worksheet, year_worksheet)
         resize_columns(year_spreadsheet, year_worksheet, {'Name': 160, 'Position': 81, 'School': 295, 'State': 40, 'Hometown': 340})
 
@@ -112,9 +245,9 @@ def update_canadians_sheet(copy_to_production = False):
 def update_stats_sheet(copy_to_production = False):
     blank_row = [['', '', '', '', '']]
 
-    canadians_in_college_stats_worksheet = hub_spreadsheet.worksheet('Canadians in College Stats')
+    canadians_in_college_stats_worksheet = hub_spreadsheet.sheet('Canadians in College Stats')
 
-    stats_worksheet = hub_spreadsheet.worksheet('Stats')
+    stats_worksheet = hub_spreadsheet.sheet('Stats')
     stats_worksheet_values = stats_worksheet.get_all_values()
     stats_df = pd.DataFrame(stats_worksheet_values[1:], columns = stats_worksheet_values[0]) # Read existing values
     stats_df = stats_df[stats_df['stats_id'] != ''] # Ignore blank row
@@ -123,7 +256,7 @@ def update_stats_sheet(copy_to_production = False):
     stats_df['ERA'] = stats_df['ERA'].round(2)
     stats_df['IP'] = stats_df['IP'].round(1)
 
-    players_worksheet = hub_spreadsheet.worksheet('Players')
+    players_worksheet = hub_spreadsheet.sheet('Players')
     players_worksheet_values = players_worksheet.get_all_values()
     players_df = pd.DataFrame(players_worksheet_values[1:], columns = players_worksheet_values[0], dtype=str) # Read existing values
     players_df = players_df[players_df['stats_id'] != ''].rename({'school': 'School'}, axis = 1) # Ignore blank row
@@ -141,7 +274,7 @@ def update_stats_sheet(copy_to_production = False):
     stats_data = list()
 
     batting_stats, batting_labels, pitching_stats, pitching_labels = list(), list(), list(), list()
-    for stat_category, stat_value_label_dict in stats_labels.items():
+    for stat_category, stat_value_label_dict in cbn_utils.stats_labels.items():
         for stat, label in stat_value_label_dict.items():
             if stat_category == 'batting':
                 batting_stats.append(stat)
@@ -209,14 +342,14 @@ def update_stats_sheet(copy_to_production = False):
 
     # Resize columns and re-size sheets
     canadians_in_college_stats_worksheet.resize(rows = len(data))
-    resize_columns(hub_spreadsheet, canadians_in_college_stats_worksheet, {'Rank': 50, 'Name': 160, 'Position': 75, 'School': 295, 'Stat': 280})
+    resize_columns(hub_spreadsheet, canadians_in_college_stats_worksheet, {'Rank': 50, 'Name': 170, 'Position': 75, 'School': 295, 'Stat': 280})
 
     # Copy sheet from Hub to Shared sheet
     if copy_to_production:
-        year_spreadsheet = google_spreadsheets.spreadsheet(name = f'Canadians in College Stats: {config_values["YEAR"]}')
-        year_worksheet = year_spreadsheet.worksheet(config_values['YEAR'])
+        year_spreadsheet = google_spreadsheet.sheet(name = f'Canadians in College Stats: {config["YEAR"]}')
+        year_worksheet = year_spreadsheet.sheet(config['YEAR'])
         copy_and_paste_sheet(year_spreadsheet, canadians_in_college_stats_worksheet, year_worksheet)
-        resize_columns(year_spreadsheet, year_worksheet, {'Rank': 50, 'Name': 160, 'Position': 75, 'School': 295, 'Stat': 280})
+        resize_columns(year_spreadsheet, year_worksheet, {'Rank': 50, 'Name': 170, 'Position': 75, 'School': 295, 'Stat': 280})
     print('Done!')
 
 def clear_sheets(spreadsheet, worksheets):

@@ -1,11 +1,9 @@
 import cbn_utils
+from google_sheets import config
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
-import json
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -18,29 +16,6 @@ headers = {
     'X-Requested-With': 'XMLHttpRequest'
 }
 timeout = 20
-
-class GoogleSpreadsheet:
-    def __init__(self, keyfile = ''):
-        # Check types
-        cbn_utils.check_arg_type(name = 'keyfile', value = keyfile, value_type = str)
-
-        # Check values
-        cbn_utils.check_string_arg(name = 'keyfile', value = keyfile, disallowed_values = [''])
-
-        # authorize the clientsheet 
-        self.client = gspread.authorize(
-            ServiceAccountCredentials.from_json_keyfile_dict(
-                json.loads(keyfile),
-                [
-                    'https://spreadsheets.google.com/feeds',
-                    'https://www.googleapis.com/auth/drive'
-                ]
-            )
-        )
-
-    def spreadsheet(self, name = ''):
-        return self.client.open(name)
-
 
 class Page:
     '''
@@ -399,19 +374,19 @@ class Player:
             'stats_id': self.stats_id
         }
 
-    def stats(self, config_values):
+    def stats(self):
         if self.stats_id != '':
             stat_dict = self.__stats
             if self.school.league == 'NCAA':
-                ncaa_base_url = f'https://stats.ncaa.org/player/index?id={config_values["NCAA_STAT_YEAR"]}&stats_player_seq='
-                for i, stat_category_id in enumerate([config_values['NCAA_BATTING_STAT_ID'], config_values['NCAA_PITCHING_STAT_ID']]):
+                ncaa_base_url = f'https://stats.ncaa.org/player/index?id={config["NCAA_STAT_YEAR"]}&stats_player_seq='
+                for i, stat_category_id in enumerate([config['NCAA_BATTING_STAT_ID'], config['NCAA_PITCHING_STAT_ID']]):
                     self.__stats_url = f'{ncaa_base_url}{self.stats_id}&year_stat_category_id={stat_category_id}'
                     html = session.get(self.__stats_url, headers = headers, timeout = timeout).text
                     df = pd.read_html(html)[2]
                     new_header = df.iloc[1] # grab the first row for the header
                     df = df[2:] # take the data less the header row
                     df.columns = new_header # set the header row as the df header
-                    df = df[df['Year'] == config_values['ACADEMIC_YEAR']]
+                    df = df[df['Year'] == config['ACADEMIC_YEAR']]
                     if len(df.index) == 1:
                         if i == 0:
                             df.rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG'}, axis = 1, inplace = True)
@@ -423,15 +398,15 @@ class Player:
                         stat_dict = stat_dict | df.fillna(0).to_dict(orient = 'records')[0]
             else:
                 if self.school.league == 'NAIA':
-                    self.__stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.__stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 elif self.school.league == 'JUCO':
-                    self.__stats_url = f'https://www.njcaa.org/sports/bsb/{config_values["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.stats_id}?view=profile'
+                    self.__stats_url = f'https://www.njcaa.org/sports/bsb/{config["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.stats_id}?view=profile'
                 elif self.school.league == 'CCCAA':
-                    self.__stats_url = f'https://www.cccaasports.org/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.__stats_url = f'https://www.cccaasports.org/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 elif self.school.league == 'NWAC':
-                    self.__stats_url = f'https://nwacsports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.__stats_url = f'https://nwacsports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 elif self.school.league == 'USCAA':
-                    self.__stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config_values["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.__stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
                 req = session.get(self.__stats_url, headers = headers, timeout = timeout)
                 for df in pd.read_html(req.text):
                     if 'Statistics category' in df.columns:
