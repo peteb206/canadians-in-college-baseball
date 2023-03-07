@@ -1,5 +1,4 @@
 import cbn_utils
-from google_sheets import config
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -9,13 +8,6 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 urllib3 = requests.packages.urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-session = requests.Session()
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-    'X-Requested-With': 'XMLHttpRequest'
-}
-timeout = 20
 
 class Page:
     '''
@@ -45,10 +37,10 @@ class Page:
     def __fetch_roster_page__(self):
         if self.url:
             try: # send verified request
-                return session.get(self.url, headers = headers, timeout = timeout, verify = True)
+                return cbn_utils.get(self.url)
             except requests.exceptions.SSLError: # send unverified request
                 print(f'WARNING: sending unverified request to {self.url}')
-                return session.get(self.url, headers = headers, timeout = timeout, verify = False)
+                return cbn_utils.get(self.url, verify = False)
 
     def html(self, new_request = False):
         if (self.url != '') & (new_request | (self.__html == '')):
@@ -124,15 +116,15 @@ class Page:
             self.df.columns = cols
         return self.df.dropna(axis = 0, how = 'all') # remove rows with all NaN
 
-
 class School:
     '''
     from model import School, Page
     school = School(name = 'U.S. Air Force Academy', league = 'NCAA', division = '1', state = 'CO', roster_page = Page(url = 'https://goairforcefalcons.com/sports/baseball/roster/2023'))
     school.players()
     '''
-    def __init__(self, name = '', league = '', division = '', state = '', roster_page: Page = None):
+    def __init__(self, id = '', name = '', league = '', division = '', state = '', roster_page: Page = None):
         # Check types
+        cbn_utils.check_arg_type(name = 'id', value = id, value_type = str)
         cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
         cbn_utils.check_arg_type(name = 'league', value = league, value_type = str)
         cbn_utils.check_arg_type(name = 'division', value = division, value_type = str)
@@ -140,17 +132,20 @@ class School:
         cbn_utils.check_arg_type(name = 'roster_page', value = roster_page, value_type = Page)
 
         # Check values
+        cbn_utils.check_string_arg(name = 'id', value = id, disallowed_values = [''])
         cbn_utils.check_string_arg(name = 'name', value = name, disallowed_values = [''])
         cbn_utils.check_string_arg(name = 'league', value = league, allowed_values = ['NCAA', 'NAIA', 'JUCO', 'CCCAA', 'NWAC', 'USCAA'])
         cbn_utils.check_string_arg(name = 'division', value = division, allowed_values = ['', '1', '2', '3'])
         cbn_utils.check_string_arg(name = 'state', value = state, allowed_values = ['AL', 'AK', 'AR', 'AZ', 'BC', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'GA', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ', 'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT', 'WA', 'WI', 'WV'])
 
+        self.id = id
         self.name = name
         self.league = league
         self.division = division
         self.state = state
         self.roster_page = roster_page
         self.__players = list()
+        self.stat_ids = None
 
     def __repr__(self):
         return str({
@@ -237,7 +232,7 @@ class School:
             out = 'B'
         return out
 
-    def __format_player_hometown__(self, string: str, debug=False):
+    def __format_player_hometown__(self, string: str, debug = False):
         city, province = '', ''
         string2 = re.sub(r'\s*\(*(?:Canada|CANADA|Can.|CN|CAN|CA)\)*\.*', '', string) # Remove references to Canada
 
@@ -262,7 +257,7 @@ class School:
             print(f'"{string}" converted to ---> City: "{city}" | Province: "{province}"')
         return re.sub(r'[^\w\-\s\.]', '', city).strip(), province # remove unwanted characters from city
 
-    def players(self, debug=False):
+    def players(self, debug = False):
         if len(self.__players) == 0:
             df = self.roster_page.get_table()
             cols = ['last_name', 'first_name', 'positions', 'bats', 'throws', 'year', 'city', 'province', 'canadian']
@@ -307,25 +302,57 @@ class School:
                             if (any(canada_string.lower() in value_str.lower() for canada_string in cbn_utils.canada_strings)) & (~any(ignore_string in value_str.lower() for ignore_string in cbn_utils.ignore_strings)):
                                 new_dict['city'], new_dict['province'] = self.__format_player_hometown__(value_str, debug=debug)
                                 new_dict['canadian'] = True
-                new_dict['school'] = self
                 player = Player(**new_dict)
                 self.__players.append(player)
         return self.__players
 
+    def player_stat_ids(self, config) -> dict:
+        self.stat_ids = dict()
+        url = ''
+        if self.league == 'NCAA':
+            f'https://stats.ncaa.org/team/{self.id.split("-")[1]}/roster/{config["NCAA_STAT_YEAR"]}'
+        elif self.league == 'JUCO':
+            url = f'https://www.njcaa.org/sports/bsb/{config["ACADEMIC_YEAR"]}/div{self.division}/teams/{self.id.split("-")[1]}?view=roster'
+        elif self.league == 'NAIA':
+            url = f'https://naiastats.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=lineup'
+        elif self.league == 'CCCAA':
+            url = f'https://www.cccaasports.org/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=lineup'
+        elif self.league == 'NWAC':
+            url = f'https://nwacsports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=roster'
+        elif self.league == 'USCAA':
+            url = f'https://uscaa.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=lineup'
+        else:
+            return self.stat_ids
+        print('Fetching player IDs for', self.name, url)
+        html = cbn_utils.get(url).text
+        soup = BeautifulSoup(html, 'html.parser')
+        for table in soup.find_all('table'):
+            for td in table.find_all('td'):
+                a = td.find('a')
+                if a != None:
+                    if 'player' in a['href']:
+                        if self.league == 'NCAA':
+                            name_split = a.text.split(', ')
+                            full_name = f'{name_split[-1]} {name_split[0]}'
+                            self.stat_ids[full_name] = a['href'].split('=')[-1]
+                        else:
+                            full_name = re.sub('\\n\s{2,}', ' ', a.text).strip()
+                            self.stat_ids[full_name] = a['href'].split('/')[-1]
+        return self.stat_ids
+
 class Player:
-    def __init__(self, last_name = '', first_name = '', positions = [], bats = '', throws = '', year = '', school: School = None, city = '', province = '', canadian: bool = False, stats_id = ''):
+    def __init__(self, id = '', last_name = '', first_name = '', positions = [], bats = '', throws = '', year = '', city = '', province = '', canadian: bool = False):
         # Check types
+        cbn_utils.check_arg_type(name = 'id', value = id, value_type = str)
         cbn_utils.check_arg_type(name = 'last_name', value = last_name, value_type = str)
         cbn_utils.check_arg_type(name = 'first_name', value = first_name, value_type = str)
         cbn_utils.check_arg_type(name = 'positions', value = positions, value_type = list)
         cbn_utils.check_arg_type(name = 'bats', value = bats, value_type = str)
         cbn_utils.check_arg_type(name = 'throws', value = throws, value_type = str)
         cbn_utils.check_arg_type(name = 'year', value = year, value_type = str)
-        cbn_utils.check_arg_type(name = 'school', value = school, value_type = School)
         cbn_utils.check_arg_type(name = 'city', value = city, value_type = str)
         cbn_utils.check_arg_type(name = 'province', value = province, value_type = str)
         cbn_utils.check_arg_type(name = 'canadian', value = canadian, value_type = bool)
-        cbn_utils.check_arg_type(name = 'stats_id', value = stats_id, value_type = str)
 
         # Check values
         cbn_utils.check_string_arg(name = 'last_name', value = last_name, disallowed_values = [''])
@@ -334,21 +361,20 @@ class Player:
         cbn_utils.check_string_arg(name = 'bats', value = bats, allowed_values = ['', 'R', 'L', 'B'])
         cbn_utils.check_string_arg(name = 'throws', value = throws, allowed_values = ['', 'R', 'L', 'B'])
         cbn_utils.check_string_arg(name = 'year', value = year, allowed_values = ['', 'Redshirt', 'Freshman', 'Sophomore', 'Junior', 'Senior'])
-        # cbn_utils.check_string_arg(name = 'school', value = school, disallowed_values = [None])
         cbn_utils.check_string_arg(name = 'province', value = province, allowed_values = ['', 'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick', 'Newfoundland & Labrador', 'Nova Scotia', 'Ontario', 'Prince Edward Island', 'Quebec', 'Saskatchewan'])
 
+        self.id = id
         self.last_name = last_name
         self.first_name = first_name
         self.positions = positions
         self.bats = bats
         self.throws = throws
         self.year = year
-        self.school = school
+        self.school: School = None
         self.city = city
         self.province = province
         self.canadian = canadian
-        self.stats_id = stats_id
-        self.__stats_url = ''
+        self.stats_url = ''
         self.__batting_stats = list(cbn_utils.stats_labels['batting'].keys())
         self.__pitching_stats = list(cbn_utils.stats_labels['pitching'].keys())
         self.__stats = {stat: 0 for stat in self.__batting_stats + self.__pitching_stats}
@@ -358,6 +384,7 @@ class Player:
 
     def to_dict(self):
         return {
+            'id': self.id,
             'last_name': self.last_name,
             'first_name': self.first_name,
             'positions': self.positions,
@@ -366,22 +393,28 @@ class Player:
             'year': self.year,
             'city': self.city,
             'province': self.province,
-            'school': self.school.name if self.school != None else '',
+            'school': self.school.id if self.school != None else '',
             'league': self.school.league if self.school != None else '',
             'division': self.school.division if self.school != None else '',
             'state': self.school.state if self.school != None else '',
-            'canadian': self.canadian,
-            'stats_id': self.stats_id
+            'canadian': self.canadian
         }
 
-    def stats(self):
-        if self.stats_id != '':
+    def get_id(self, config) -> str:
+        if (self.id == '') & (self.school != None):
+            school_player_ids = self.school.player_stat_ids(config) if self.school.stat_ids == None else self.school.stat_ids
+            if f'{self.first_name} {self.last_name}' in school_player_ids.keys():
+                self.id = school_player_ids[f'{self.first_name} {self.last_name}']
+        return self.id
+
+    def stats(self, config):
+        if self.id != '':
             stat_dict = self.__stats
             if self.school.league == 'NCAA':
                 ncaa_base_url = f'https://stats.ncaa.org/player/index?id={config["NCAA_STAT_YEAR"]}&stats_player_seq='
                 for i, stat_category_id in enumerate([config['NCAA_BATTING_STAT_ID'], config['NCAA_PITCHING_STAT_ID']]):
-                    self.__stats_url = f'{ncaa_base_url}{self.stats_id}&year_stat_category_id={stat_category_id}'
-                    html = session.get(self.__stats_url, headers = headers, timeout = timeout).text
+                    self.stats_url = f'{ncaa_base_url}{self.id}&year_stat_category_id={stat_category_id}'
+                    html = cbn_utils.get(self.stats_url).text
                     df = pd.read_html(html)[2]
                     new_header = df.iloc[1] # grab the first row for the header
                     df = df[2:] # take the data less the header row
@@ -398,17 +431,17 @@ class Player:
                         stat_dict = stat_dict | df.fillna(0).to_dict(orient = 'records')[0]
             else:
                 if self.school.league == 'NAIA':
-                    self.__stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
                 elif self.school.league == 'JUCO':
-                    self.__stats_url = f'https://www.njcaa.org/sports/bsb/{config["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.stats_id}?view=profile'
+                    self.stats_url = f'https://www.njcaa.org/sports/bsb/{config["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.id}?view=profile'
                 elif self.school.league == 'CCCAA':
-                    self.__stats_url = f'https://www.cccaasports.org/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.stats_url = f'https://www.cccaasports.org/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
                 elif self.school.league == 'NWAC':
-                    self.__stats_url = f'https://nwacsports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
+                    self.stats_url = f'https://nwacsports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
                 elif self.school.league == 'USCAA':
-                    self.__stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.stats_id}?view=profile'
-                req = session.get(self.__stats_url, headers = headers, timeout = timeout)
-                for df in pd.read_html(req.text):
+                    self.stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
+                html = cbn_utils.get(self.stats_url).text
+                for df in pd.read_html(html):
                     if 'Statistics category' in df.columns:
                         pitching_stat_index = df[df['Statistics category'] == 'Appearances'].index.to_list()[0]
                         batting_df = df.head(pitching_stat_index).set_index('Statistics category')
@@ -430,6 +463,3 @@ class Player:
             stat_dict['OPS'] = stat_dict['OBP'] + stat_dict['SLG']
             self.__stats = stat_dict
         return self.__stats
-
-    def stats_url(self):
-        return self.__stats_url

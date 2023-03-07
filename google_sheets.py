@@ -1,4 +1,5 @@
 import cbn_utils
+from model import Page, School
 import os
 import json
 import gspread
@@ -7,6 +8,7 @@ import time
 from datetime import datetime
 import re
 import pandas as pd
+
 class GoogleSpreadsheet:
     def __init__(self):
         # get API key
@@ -50,14 +52,14 @@ class Spreadsheet:
         return Sheet(spreadsheet = self.__spreadsheet, name = name)
 
 class Sheet:
-    def __init__(self, spreadsheet: gspread.Spreadsheet, name: str = ''):
+    def __init__(self, spreadsheet: gspread.Spreadsheet, index: int = -1, name: str = ''):
         # Check types
         cbn_utils.check_arg_type(name = 'spreadsheet', value = spreadsheet, value_type = gspread.Spreadsheet)
+        cbn_utils.check_arg_type(name = 'index', value = index, value_type = int)
         cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
 
-        self.__sheet: gspread.Worksheet = spreadsheet.worksheet(name)
+        self.__sheet: gspread.Worksheet = spreadsheet.get_worksheet(index) if index >= 0 else spreadsheet.worksheet(name)
         self.__columns = list()
-        self.__values = list()
 
     def columns(self) -> list:
         self.__columns = list()
@@ -66,26 +68,30 @@ class Sheet:
             self.__columns = columns[0]
         return self.__columns
 
-    def to_list(self, include_header = False) -> list[list]:
+    def row_count(self) -> int:
+        return int(self.__sheet.row_count)
+
+    def to_list(self, include_header = False, calculate_formulas = False) -> list[list]:
         # Check types
         cbn_utils.check_arg_type(name = 'include_header', value = include_header, value_type = bool)
 
-        self.__values = list()
-        values = self.__sheet.get_all_values()
-        if include_header:
-            self.__values = values
-        elif len(values) > 1:
-            self.__values = values[1:]
-        return self.__values
+        values = self.__sheet.get_all_values() if calculate_formulas else self.__sheet.get_all_values(value_render_option = 'FORMULA')
+        if not include_header:
+            if len(values) > 1:
+                values = values[1:]
+            else:
+                values = list()
+        return values
 
-    def to_dict(self) -> list[dict]:
-        return self.__sheet.get_all_records()
-
-    def to_df(self) -> pd.DataFrame:
-        return pd.DataFrame(self.to_list(), columns = self.columns())
+    def to_df(self, calculate_formulas = False) -> pd.DataFrame:
+        all_values = self.to_list(include_header = True, calculate_formulas = calculate_formulas)
+        return pd.DataFrame(all_values[1:], columns = all_values[0]) if len(all_values) > 0 else pd.DataFrame()
 
     def delete_row(self, row_number):
         self.__sheet.delete_rows(row_number)
+
+    def update_cells(self, range_name: str, values = list()):
+        self.__sheet.update(range_name, values)
 
     def update_data(self, new_data_df: pd.DataFrame, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0):
         # Check types
@@ -109,13 +115,13 @@ class Sheet:
            rows_to_delete_df['row_number'].apply(lambda row_number: self.delete_row(row_number))
 
         # Add rows not found in existing data
-        rows_to_add_df = compare_data_df[compare_data_df['source'] == 'right_only']
+        rows_to_add_df = compare_data_df[compare_data_df['source'] == 'right_only'][new_data_df.columns]
         number_of_rows_to_add = len(rows_to_add_df.index)
         if number_of_rows_to_add > 0:
            change = True
            print(f'Adding the following {number_of_rows_to_add} rows:')
            print(rows_to_add_df)
-           self.__sheet.append_rows(rows_to_add_df.values.tolist())
+           self.__sheet.append_rows(rows_to_add_df[new_data_df.columns].values.tolist(), value_input_option = 'USER_ENTERED')
 
         # Format the sheet
         if change:
@@ -129,27 +135,30 @@ class Sheet:
             elif freeze_cols > 0:
                 self.__sheet.freeze(cols = freeze_cols) # Freeze x cols
             columns = self.columns()
+            if (row_count > 0) & (len(sort_by) > 0):
+                self.__sheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns), range = f'A2:{self.col_num_to_letter(len(columns))}{row_count}')
             self.__sheet.columns_auto_resize(start_column_index = 0, end_column_index = len(columns) - 1) # Resize columns
-            if len(sort_by) > 0:
-                self.__sheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns))
+
+    @staticmethod
+    def col_num_to_letter(num: int) -> str:
+        assert num < 27, 'This method only works for columns A-Z (1-26)'
+        return chr(ord('@') + num)
 
 google_spreadsheet = GoogleSpreadsheet()
 hub_spreadsheet = google_spreadsheet.spreadsheet(name = 'Canadians in College Baseball Hub V2')
-config = {x[0]: x[1] for x in hub_spreadsheet.sheet(name = 'Configuration').to_list()}
+config = {x[0]: x[1] for x in hub_spreadsheet.sheet(name = 'Configuration').to_list(calculate_formulas = True)}
 
-# TODO: create this by getting unique values from teams list
-division_list = [
-    ('NCAA', '1', 'NCAA: Division 1'),
-    ('NCAA', '2', 'NCAA: Division 2'),
-    ('NCAA', '3', 'NCAA: Division 3'),
-    ('NAIA', '', 'NAIA'),
-    ('JUCO', '1', 'JUCO: Division 1'),
-    ('JUCO', '2', 'JUCO: Division 2'),
-    ('JUCO', '3', 'JUCO: Division 3'),
-    ('CCCAA', '', 'California CC'),
-    ('NWAC', '', 'NW Athletic Conference'),
-    ('USCAA', '', 'USCAA')
-]
+# schools = [
+#     School(
+#         id = school_dict['id'],
+#         name = school_dict['school'],
+#         league = school_dict['league'],
+#         division = school_dict['division'],
+#         state = school_dict['state'],
+#         roster_page = Page(url = school_dict['roster_link'])
+#     )
+#     for school_dict in hub_spreadsheet.sheet('Schools').to_dict()
+# ]
 
 def update_canadians_sheet(copy_to_production = False):
     blank_row = [['', '', '', '', '']]
@@ -182,8 +191,8 @@ def update_canadians_sheet(copy_to_production = False):
     class_list = ['Freshman', 'Sophomore', 'Junior', 'Senior']
 
     # Loop through divisions
-    for division in division_list:
-        league, division, label = division
+    for league in cbn_utils.leagues:
+        league, division, label = league['league'], league['division'], league['label']
         # Subset dataframe
         df_split_div = players_df[(players_df['league'] == league) & (players_df['division'] == division)].drop(['league', 'division'], axis=1)
         if len(df_split_div.index) > 0:
@@ -217,8 +226,8 @@ def update_canadians_sheet(copy_to_production = False):
     canadians_in_college_worksheet.insert_rows(data, row = 1)
 
     # Format division/class headers
-    division_list.append('Coaches')
-    format_headers(hub_spreadsheet, canadians_in_college_worksheet, canadians_in_college_worksheet.findall(re.compile(r'^(' + '|'.join([x[2] for x in division_list]) + r')$')), True, len(blank_row[0]))
+    cbn_utils.leagues.append({'league': '', 'division': '', 'label': 'Coaches'})
+    format_headers(hub_spreadsheet, canadians_in_college_worksheet, canadians_in_college_worksheet.findall(re.compile(r'^(' + '|'.join([x[2] for x in cbn_utils.leagues]) + r')$')), True, len(blank_row[0]))
     time.sleep(120) # break up the requests to avoid error
     format_headers(hub_spreadsheet, canadians_in_college_worksheet, canadians_in_college_worksheet.findall(re.compile(r'^(' + '|'.join(['Freshmen', 'Sophomores', 'Juniors', 'Seniors']) + r')$')), False, len(blank_row[0]))
     time.sleep(120) # break up the requests to avoid error
@@ -283,7 +292,7 @@ def update_stats_sheet(copy_to_production = False):
                 pitching_stats.append(stat)
                 pitching_labels.append(f'{label} ({"G" if stat == "APP" else stat})')
 
-    for division in division_list:
+    for division in cbn_utils.leagues:
         league, division, label = division
         added_league_header = False
         df_split_div = players_df[(players_df['league'] == league) & (players_df['division'] == division)]
@@ -329,7 +338,7 @@ def update_stats_sheet(copy_to_production = False):
 
     # Format division/class headers
     print('Formatting division headers...')
-    format_headers(hub_spreadsheet, canadians_in_college_stats_worksheet, canadians_in_college_stats_worksheet.findall(re.compile(r'^(' + '|'.join([x[2] for x in division_list]) + r')$')), True, len(blank_row[0]))
+    format_headers(hub_spreadsheet, canadians_in_college_stats_worksheet, canadians_in_college_stats_worksheet.findall(re.compile(r'^(' + '|'.join([x[2] for x in cbn_utils.leagues]) + r')$')), True, len(blank_row[0]))
     time.sleep(120) # break up the requests to avoid error
     print('Formatting stat headers...')
     format_headers(hub_spreadsheet, canadians_in_college_stats_worksheet, canadians_in_college_stats_worksheet.findall(re.compile(r'^(' + '|'.join([stat_label.replace('(', '\(').replace(')', '\)') for stat_label in batting_labels + pitching_labels]) + r')$'), in_column=1), False, len(blank_row[0]))

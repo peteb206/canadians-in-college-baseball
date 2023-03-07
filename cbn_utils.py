@@ -1,35 +1,33 @@
 import re
+import requests
+import os
+import pandas as pd
+from datetime import datetime
+import smtplib
+from email.mime.text import MIMEText
 
-def check_arg_type(name='', value=None, value_type=None) -> bool:
-    assert type(value) == value_type, f'"{name}" argument must be of type {value_type.__name__}, NOT {type(value).__name__}'
+# Requests
+session = requests.Session()
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'X-Requested-With': 'XMLHttpRequest'
+}
 
-def check_string_arg(name='', value='', allowed_values=[], disallowed_values=[]) -> bool:
-    passes, message = True, ''
-    if len(allowed_values):
-        if value not in allowed_values:
-            passes = False
-            message = f'"{name}" argument must be a str from the following list: {allowed_values}. "{value}" was provided. '
-    if len(disallowed_values):
-        if value in disallowed_values:
-            passes = False
-            message += f'"{name}" argument must be a str NOT from the following list: {disallowed_values}. "{value}" was provided. '
-    assert passes, message
+def get(url: str, headers: dict[str, str] = headers, timeout: int = 20, verify: bool = True):
+    return session.get(url, headers = headers, timeout = timeout, verify = verify)
 
-def check_list_arg(name='', values=[], allowed_values=[], disallowed_values=[]) -> bool:
-    passes, message = True, ''
-    for value in values:
-        if len(allowed_values):
-            if value not in allowed_values:
-                passes = False
-                message += f'"{name}" argument must be from the following list: {allowed_values}. "{value}" was provided. '
-        if len(disallowed_values):
-            if value in disallowed_values:
-                passes = False
-                message += f'"{name}" argument must NOT be from the following list: {disallowed_values}. "{value}" was provided. '
-    assert passes, message
-
-def strikethrough(x) -> str:
-    return ''.join([character + '\u0336' for character in str(x)])
+# Labels
+leagues = [
+    {'league': 'NCAA', 'division': str(division), 'label': f'NCAA: Division {division}'} for division in range(1, 4)
+] + [
+    {'league': 'NAIA', 'division': '', 'label': 'NAIA'}
+] + [
+    {'league': 'JUCO', 'division': str(division), 'label': f'NJCAA: Division {division}'} for division in range(1, 4)
+] + [
+    {'league': 'CCCAA', 'division': '', 'label': 'California CC'},
+    {'league': 'NWAC', 'division': '', 'label': 'NW Athletic Conference'},
+    {'league': 'USCAA', 'division': '', 'label': 'USCAA'}
+]
 
 stats_labels = {
     'batting': {
@@ -62,6 +60,68 @@ stats_labels = {
     }
 }
 
+# Functions
+def check_arg_type(name='', value=None, value_type=None) -> bool:
+    assert type(value) == value_type, f'"{name}" argument must be of type {value_type.__name__}, NOT {type(value).__name__}'
+
+def check_string_arg(name='', value='', allowed_values=[], disallowed_values=[]) -> bool:
+    passes, message = True, ''
+    if len(allowed_values):
+        if value not in allowed_values:
+            passes = False
+            message = f'"{name}" argument must be a str from the following list: {allowed_values}. "{value}" was provided. '
+    if len(disallowed_values):
+        if value in disallowed_values:
+            passes = False
+            message += f'"{name}" argument must be a str NOT from the following list: {disallowed_values}. "{value}" was provided. '
+    assert passes, message
+
+def check_list_arg(name='', values=[], allowed_values=[], disallowed_values=[]) -> bool:
+    passes, message = True, ''
+    for value in values:
+        if len(allowed_values):
+            if value not in allowed_values:
+                passes = False
+                message += f'"{name}" argument must be from the following list: {allowed_values}. "{value}" was provided. '
+        if len(disallowed_values):
+            if value in disallowed_values:
+                passes = False
+                message += f'"{name}" argument must NOT be from the following list: {disallowed_values}. "{value}" was provided. '
+    assert passes, message
+
+def strikethrough(x) -> str:
+    return ''.join([character + '\u0336' for character in str(x)])
+
+# Email
+def send_results_email(diff_df: pd.DataFrame):
+    os.environ['EMAIL_SENDER'] = 'peteb206@gmail.com'
+    os.environ['EMAIL_RECIPIENT'] = 'peteb206@gmail.com'
+    os.environ['EMAIL_SENDER_PASSWORD'] = 'uvuklzplnvnypgbu'
+    now = datetime.now()
+    new_line = '<div><br></div>'
+    added_df = diff_df[diff_df['diff'] == 'added']
+    dropped_df = diff_df[diff_df['diff'] == 'dropped']
+
+    html = f'<div dir="ltr">Hey Bob,{new_line}'
+    if len(added_df.index) + len(dropped_df.index) > 0:
+        if len(added_df.index) > 0:
+            html += f'<div>Here are the new players who have been added to the list this week:<br></div><div>{added_df.drop("diff", axis = 1).to_html()}</div>{new_line * 2}'
+        if len(dropped_df.index) > 0:
+            html += f'<div>These guys were dropped from the list because they were on the schools\' {now.year - 1} rosters but NOT on the updated {now.year} roster:</div><div>{dropped_df.drop("diff", axis = 1).to_html()}</div>{new_line * 2}'
+    else:
+        html += f'<div>No new players were found by the scraper this week.</div>{new_line}'
+    html += f'<div>Thanks,</div><div>Pete</div></div>'
+
+    msg = MIMEText(html, 'html')
+    msg['Subject'] = f'New Players (Week of {now.strftime("%B %d, %Y")})'
+    msg['From'] = os.environ.get('EMAIL_SENDER')
+    msg['To'] = os.environ.get('EMAIL_RECIPIENT')
+    smtp_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+    smtp_server.login(os.environ.get('EMAIL_SENDER'), os.environ.get('EMAIL_SENDER_PASSWORD'))
+    smtp_server.sendmail(os.environ.get('EMAIL_SENDER'), os.environ.get('EMAIL_RECIPIENT'), msg.as_string())
+    smtp_server.quit()
+
+# Canada logic
 city_strings = {
     'Quebec': ['montreal', 'saint-hilaire']
 }
