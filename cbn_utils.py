@@ -13,16 +13,31 @@ headers = {
     'X-Requested-With': 'XMLHttpRequest'
 }
 
-def get(url: str, headers: dict[str, str] = headers, timeout: int = 20, verify: bool = True):
-    return session.get(url, headers = headers, timeout = timeout, verify = verify)
+def get(url: str, headers: dict[str, str] = headers, timeout: int = 60, verify: bool = True, attempt: int = 0):
+    print(log_prefix(), 'GET', url, end = '')
+    try:
+        req = session.get(url, headers = headers, timeout = timeout, verify = verify)
+    except requests.exceptions.ReadTimeout: # 1 retry on timeout
+        if attempt == 0:
+            print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
+            get(url, headers = headers, timeout = timeout * 2, verify = verify, attempt = 1)
+    print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
+    return req
 
 # Labels
+NCAA_DOMAIN = 'stats.ncaa.org'
+NAIA_DOMAIN = 'naiastats.prestosports.com'
+JUCO_DOMAIN = 'www.njcaa.org'
+CCCAA_DOMAIN = 'www.cccaasports.org'
+NWAC_DOMAIN = 'nwacsports.com'
+USCAA_DOMAIN = 'uscaa.prestosports.com'
+
 leagues = [
     {'league': 'NCAA', 'division': str(division), 'label': f'NCAA: Division {division}'} for division in range(1, 4)
 ] + [
     {'league': 'NAIA', 'division': '', 'label': 'NAIA'}
 ] + [
-    {'league': 'JUCO', 'division': str(division), 'label': f'NJCAA: Division {division}'} for division in range(1, 4)
+    {'league': 'JUCO', 'division': str(division), 'label': f'JUCO: Division {division}'} for division in range(1, 4)
 ] + [
     {'league': 'CCCAA', 'division': '', 'label': 'California CC'},
     {'league': 'NWAC', 'division': '', 'label': 'NW Athletic Conference'},
@@ -61,6 +76,12 @@ stats_labels = {
 }
 
 # Functions
+def log(message: str):
+    print(log_prefix(), message)
+
+def log_prefix() -> str:
+    return f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]} -'
+
 def check_arg_type(name='', value=None, value_type=None) -> bool:
     assert type(value) == value_type, f'"{name}" argument must be of type {value_type.__name__}, NOT {type(value).__name__}'
 

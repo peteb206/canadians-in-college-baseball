@@ -1,5 +1,4 @@
 import cbn_utils
-from model import Page, School
 import os
 import json
 import gspread
@@ -71,11 +70,11 @@ class Sheet:
     def row_count(self) -> int:
         return int(self.__sheet.row_count)
 
-    def to_list(self, include_header = False, calculate_formulas = False) -> list[list]:
+    def to_list(self, include_header = False) -> list[list]:
         # Check types
         cbn_utils.check_arg_type(name = 'include_header', value = include_header, value_type = bool)
 
-        values = self.__sheet.get_all_values() if calculate_formulas else self.__sheet.get_all_values(value_render_option = 'FORMULA')
+        values = self.__sheet.get_values()
         if not include_header:
             if len(values) > 1:
                 values = values[1:]
@@ -83,15 +82,27 @@ class Sheet:
                 values = list()
         return values
 
-    def to_df(self, calculate_formulas = False) -> pd.DataFrame:
-        all_values = self.to_list(include_header = True, calculate_formulas = calculate_formulas)
+    def to_df(self) -> pd.DataFrame:
+        all_values = self.to_list(include_header = True)
         return pd.DataFrame(all_values[1:], columns = all_values[0]) if len(all_values) > 0 else pd.DataFrame()
 
-    def delete_row(self, row_number):
-        self.__sheet.delete_rows(row_number)
+    def delete_row(self, row_number: int):
+        try:
+            self.__sheet.delete_rows(row_number)
+        except gspread.exceptions.APIError:
+            cbn_utils.log('Too many gspread requests... pausing 1 minute')
+            time.sleep(60)
+            cbn_utils.log('Resuming execution...')
+            self.delete_row(row_number)
 
     def update_cells(self, range_name: str, values = list()):
-        self.__sheet.update(range_name, values)
+        try:
+            self.__sheet.update(range_name, values)
+        except gspread.exceptions.APIError:
+            cbn_utils.log('Too many gspread requests... pausing 1 minute')
+            time.sleep(60)
+            cbn_utils.log('Resuming execution...')
+            self.update_cells(range_name, values = values)
 
     def update_data(self, new_data_df: pd.DataFrame, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0):
         # Check types
@@ -101,7 +112,7 @@ class Sheet:
 
         # Compare existing and new data
         existing_data_df = self.to_df()[new_data_df.columns]
-        existing_data_df['row_number'] = existing_data_df.index.to_series() + 2
+        existing_data_df['row_number'] = (existing_data_df.index.to_series() + 2).astype(str)
         compare_data_df = pd.merge(existing_data_df, new_data_df, how = 'outer', indicator = 'source')
         change = False
 
@@ -110,18 +121,18 @@ class Sheet:
         number_of_rows_to_delete = len(rows_to_delete_df.index)
         if number_of_rows_to_delete > 0:
            change = True
-           print(f'Deleting the following {number_of_rows_to_delete} rows:')
+           cbn_utils.log(f'Deleting the following {number_of_rows_to_delete} rows:')
            print(rows_to_delete_df)
-           rows_to_delete_df['row_number'].apply(lambda row_number: self.delete_row(row_number))
+           rows_to_delete_df['row_number'].apply(lambda row_number: self.delete_row(int(row_number)))
 
         # Add rows not found in existing data
         rows_to_add_df = compare_data_df[compare_data_df['source'] == 'right_only'][new_data_df.columns]
         number_of_rows_to_add = len(rows_to_add_df.index)
         if number_of_rows_to_add > 0:
            change = True
-           print(f'Adding the following {number_of_rows_to_add} rows:')
+           cbn_utils.log(f'Adding the following {number_of_rows_to_add} rows:')
            print(rows_to_add_df)
-           self.__sheet.append_rows(rows_to_add_df[new_data_df.columns].values.tolist(), value_input_option = 'USER_ENTERED')
+           self.__sheet.append_rows(rows_to_add_df[new_data_df.columns].values.tolist())
 
         # Format the sheet
         if change:
@@ -136,29 +147,12 @@ class Sheet:
                 self.__sheet.freeze(cols = freeze_cols) # Freeze x cols
             columns = self.columns()
             if (row_count > 0) & (len(sort_by) > 0):
-                self.__sheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns), range = f'A2:{self.col_num_to_letter(len(columns))}{row_count}')
+                self.__sheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns), range = f'A2:{gspread.utils.rowcol_to_a1(row_count, len(columns))}')
             self.__sheet.columns_auto_resize(start_column_index = 0, end_column_index = len(columns) - 1) # Resize columns
-
-    @staticmethod
-    def col_num_to_letter(num: int) -> str:
-        assert num < 27, 'This method only works for columns A-Z (1-26)'
-        return chr(ord('@') + num)
 
 google_spreadsheet = GoogleSpreadsheet()
 hub_spreadsheet = google_spreadsheet.spreadsheet(name = 'Canadians in College Baseball Hub V2')
-config = {x[0]: x[1] for x in hub_spreadsheet.sheet(name = 'Configuration').to_list(calculate_formulas = True)}
-
-# schools = [
-#     School(
-#         id = school_dict['id'],
-#         name = school_dict['school'],
-#         league = school_dict['league'],
-#         division = school_dict['division'],
-#         state = school_dict['state'],
-#         roster_page = Page(url = school_dict['roster_link'])
-#     )
-#     for school_dict in hub_spreadsheet.sheet('Schools').to_dict()
-# ]
+config = {x[0]: x[1] for x in hub_spreadsheet.sheet(name = 'Configuration').to_list()}
 
 def update_canadians_sheet(copy_to_production = False):
     blank_row = [['', '', '', '', '']]

@@ -26,7 +26,7 @@ class Page:
 
         self.url = url
         self.redirect = False
-        self.status = u'\u2717'
+        self.status = u'\u274C'
         self.__html = ''
         self.dfs = list()
         self.df = pd.DataFrame()
@@ -34,22 +34,22 @@ class Page:
     def __repr__(self):
         return self.url
 
-    def __fetch_roster_page__(self):
+    def __fetch_page__(self):
         if self.url:
             try: # send verified request
                 return cbn_utils.get(self.url)
             except requests.exceptions.SSLError: # send unverified request
-                print(f'WARNING: sending unverified request to {self.url}')
+                cbn_utils.log(f'WARNING: sending unverified request to {self.url}')
                 return cbn_utils.get(self.url, verify = False)
 
-    def html(self, new_request = False):
+    def html(self, new_request = False) -> str:
         if (self.url != '') & (new_request | (self.__html == '')):
             # Re-request if URL is not blank and either re-request manually ordered or html string is blank
             self.__html = ''
-            response = self.__fetch_roster_page__()
+            response = self.__fetch_page__()
             self.redirect = (len(response.history) > 0) & (response.url != self.url)
-            self.status = f'--> {response.url} ' if self.redirect else ''
-            self.status += u'\u2713' if response.status_code == 200 else u'\u2717'
+            self.status = '{} {} '.format(u'\u27A1', response.url) if self.redirect else ''
+            self.status += u'\u2705' if response.status_code == 200 else u'\u274C'
             self.__html = response.text
         return self.__html
 
@@ -122,7 +122,7 @@ class School:
     school = School(name = 'U.S. Air Force Academy', league = 'NCAA', division = '1', state = 'CO', roster_page = Page(url = 'https://goairforcefalcons.com/sports/baseball/roster/2023'))
     school.players()
     '''
-    def __init__(self, id = '', name = '', league = '', division = '', state = '', roster_page: Page = None):
+    def __init__(self, id = '', name = '', league = '', division = '', state = '', roster_page: Page = None, stats_page: Page = None):
         # Check types
         cbn_utils.check_arg_type(name = 'id', value = id, value_type = str)
         cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
@@ -130,12 +130,12 @@ class School:
         cbn_utils.check_arg_type(name = 'division', value = division, value_type = str)
         cbn_utils.check_arg_type(name = 'state', value = state, value_type = str)
         cbn_utils.check_arg_type(name = 'roster_page', value = roster_page, value_type = Page)
+        cbn_utils.check_arg_type(name = 'stats_page', value = stats_page, value_type = Page)
 
         # Check values
         cbn_utils.check_string_arg(name = 'id', value = id, disallowed_values = [''])
         cbn_utils.check_string_arg(name = 'name', value = name, disallowed_values = [''])
         cbn_utils.check_string_arg(name = 'league', value = league, allowed_values = ['NCAA', 'NAIA', 'JUCO', 'CCCAA', 'NWAC', 'USCAA'])
-        cbn_utils.check_string_arg(name = 'division', value = division, allowed_values = ['', '1', '2', '3'])
         cbn_utils.check_string_arg(name = 'state', value = state, allowed_values = ['AL', 'AK', 'AR', 'AZ', 'BC', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'GA', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ', 'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT', 'WA', 'WI', 'WV'])
 
         self.id = id
@@ -144,17 +144,16 @@ class School:
         self.division = division
         self.state = state
         self.roster_page = roster_page
+        self.stats_page = stats_page
         self.__players = list()
-        self.stat_ids = None
+        self.stats_df = None
 
     def __repr__(self):
         return str({
             'name': self.name,
             'league': self.league,
             'division': self.division,
-            'state': self.state,
-            'roster_page': self.roster_page,
-            'players': [f'{player.first_name} {player.last_name}' for player in self.__players]
+            'state': self.state
         })
 
     def __format_player_class__(self, string: str):
@@ -306,39 +305,65 @@ class School:
                 self.__players.append(player)
         return self.__players
 
-    def player_stat_ids(self, config) -> dict:
-        self.stat_ids = dict()
-        url = ''
-        if self.league == 'NCAA':
-            f'https://stats.ncaa.org/team/{self.id.split("-")[1]}/roster/{config["NCAA_STAT_YEAR"]}'
-        elif self.league == 'JUCO':
-            url = f'https://www.njcaa.org/sports/bsb/{config["ACADEMIC_YEAR"]}/div{self.division}/teams/{self.id.split("-")[1]}?view=roster'
-        elif self.league == 'NAIA':
-            url = f'https://naiastats.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=lineup'
-        elif self.league == 'CCCAA':
-            url = f'https://www.cccaasports.org/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=lineup'
-        elif self.league == 'NWAC':
-            url = f'https://nwacsports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=roster'
-        elif self.league == 'USCAA':
-            url = f'https://uscaa.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/teams/{self.id.split("-")[1]}?view=lineup'
-        else:
-            return self.stat_ids
-        print('Fetching player IDs for', self.name, url)
-        html = cbn_utils.get(url).text
+    def get_stats_df(self) -> pd.DataFrame:
+        if self.stats_df != None:
+            return self.stats_df
+        html = self.stats_page.html()
         soup = BeautifulSoup(html, 'html.parser')
-        for table in soup.find_all('table'):
-            for td in table.find_all('td'):
-                a = td.find('a')
-                if a != None:
-                    if 'player' in a['href']:
-                        if self.league == 'NCAA':
-                            name_split = a.text.split(', ')
-                            full_name = f'{name_split[-1]} {name_split[0]}'
-                            self.stat_ids[full_name] = a['href'].split('=')[-1]
-                        else:
-                            full_name = re.sub('\\n\s{2,}', ' ', a.text).strip()
-                            self.stat_ids[full_name] = a['href'].split('/')[-1]
-        return self.stat_ids
+        if self.league == 'NCAA':
+            hitting_table = soup.find('table', {'id': 'stat_grid'})
+            hitting_df = pd.read_html(str(hitting_table))[0]
+            hitting_df = hitting_df[hitting_df['GP'] != '-']
+            hitting_df['id'] = hitting_df['Player'].apply(lambda x: hitting_table.find('a', text = x)['href'].split('stats_player_seq=')[-1])
+            url_parts = urllib3.util.parse_url(self.stats_page.url)
+            self.stats_page = Page(url = f'{url_parts.scheme}://{url_parts.netloc}{soup.find("a", text = "Pitching")["href"]}')
+            html = self.stats_page.html()
+            soup = BeautifulSoup(html, 'html.parser')
+            pitching_table = soup.find('table', {'id': 'stat_grid'})
+            pitching_df = pd.read_html(str(pitching_table))[0]
+            pitching_df = pitching_df[pitching_df['GP'] != '-']
+            pitching_df['id'] = pitching_df['Player'].apply(lambda x: pitching_table.find('a', text = x)['href'].split('stats_player_seq=')[-1])
+            df = pd.merge(
+                hitting_df[['id', 'Player', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'BA', 'OBPct', 'SlgPct']],
+                pitching_df[['id', 'App', 'GS.1', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'SO']],
+                how = 'outer',
+                on = 'id',
+                suffixes = ['', 'A']
+            )
+            df['last_name'] = df['Player'].apply(lambda x: x.split(', ')[0])
+            df['first_name'] = df['Player'].apply(lambda x: x.split(', ')[1])
+            self.stats_df = df.drop('Player', axis = 1).rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG', 'App': 'APP', 'GS.1': 'GS', 'SO': 'K'}, axis = 1)
+        else:
+            hitting_df, pitching_df = None, None
+            for table in soup.find_all('table'):
+                df = pd.read_html(str(table))[0]
+                if 'ab' in df.columns:
+                    # Hitting
+                    ids_dict = {a.text.replace('  ', ' ').strip(): a['href'].split('/')[-1] for a in table.find_all('a') if '/players/' in a['href']}
+                    ids_dict_keys = list(ids_dict.keys())
+                    hitting_df = df.rename({col: col.upper() for col in df.columns}, axis = 1)
+                    hitting_df = hitting_df[~hitting_df['NAME'].isin(['Totals', 'Opponent'])]
+                    hitting_df['id'] = hitting_df['NAME'].apply(lambda x: ids_dict[x] if x in ids_dict_keys else '')
+                elif 'ip' in df.columns:
+                    # Pitching
+                    ids_dict = {a.text.replace('  ', ' ').strip(): a['href'].split('/')[-1] for a in table.find_all('a') if '/players/' in a['href']}
+                    ids_dict_keys = list(ids_dict.keys())
+                    pitching_df = df.rename({col: col.upper() for col in df.columns}, axis = 1)
+                    pitching_df = pitching_df[~pitching_df['NAME'].isin(['Totals', 'Opponent'])]
+                    pitching_df['id'] = pitching_df['NAME'].apply(lambda x: ids_dict[x] if x in ids_dict_keys else '')
+                    break
+            df = pd.merge(
+                hitting_df[['id', 'NAME', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'AVG', 'OBP', 'SLG']],
+                pitching_df[['id', 'NAME', 'APP', 'GS', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'K']],
+                how = 'outer',
+                on = ['id', 'NAME'],
+                suffixes = ['', 'A']
+            )
+            df['last_name'] = df['NAME'].apply(lambda x: ' '.join(x.split(' ')[-1:]))
+            df['first_name'] = df['NAME'].apply(lambda x: ' '.join(x.split(' ')[:-1]))
+            self.stats_df = df.drop('NAME', axis = 1)
+        self.stats_df['OPS'] = self.stats_df.apply(lambda row: row['OBP'] + row['SLG'], axis = 1)
+        return self.stats_df
 
 class Player:
     def __init__(self, id = '', last_name = '', first_name = '', positions = [], bats = '', throws = '', year = '', city = '', province = '', canadian: bool = False):
@@ -374,13 +399,33 @@ class Player:
         self.city = city
         self.province = province
         self.canadian = canadian
-        self.stats_url = ''
-        self.__batting_stats = list(cbn_utils.stats_labels['batting'].keys())
-        self.__pitching_stats = list(cbn_utils.stats_labels['pitching'].keys())
-        self.__stats = {stat: 0 for stat in self.__batting_stats + self.__pitching_stats}
+        self.G = 0
+        self.AB = 0
+        self.R = 0
+        self.H = 0
+        self._2B = 0
+        self._3B = 0
+        self.HR = 0
+        self.RBI = 0
+        self.SB = 0
+        self.AVG = '.000'
+        self.OBP = '.000'
+        self.SLG = '.000'
+        self.OPS = '.000'
+        self.APP = 0
+        self.GS = 0
+        self.IP = '0.0'
+        self.W = 0
+        self.L = 0
+        self.ER = 0
+        self.HA = 0
+        self.BB = 0
+        self.ERA = '0.00'
+        self.SV = 0
+        self.K = 0
 
     def __repr__(self):
-        return str(self.to_dict())
+        return f'{self.first_name} {self.last_name}'
 
     def to_dict(self):
         return {
@@ -393,73 +438,98 @@ class Player:
             'year': self.year,
             'city': self.city,
             'province': self.province,
-            'school': self.school.id if self.school != None else '',
+            'school': self.school.stats_page.url if self.school != None else '',
             'league': self.school.league if self.school != None else '',
             'division': self.school.division if self.school != None else '',
             'state': self.school.state if self.school != None else '',
-            'canadian': self.canadian
+            'canadian': self.canadian,
+            'G': self.G,
+            'AB': self.AB,
+            'R': self.R,
+            'H': self.H,
+            '2B': self._2B,
+            '3B': self._3B,
+            'HR': self.HR,
+            'RBI': self.RBI,
+            'SB': self.SB,
+            'AVG': self.AVG,
+            'OBP': self.OBP,
+            'SLG': self.SLG,
+            'OPS': self.OPS,
+            'APP': self.APP,
+            'GS': self.GS,
+            'IP': self.IP,
+            'W': self.W,
+            'L': self.L,
+            'ER': self.ER,
+            'HA': self.HA,
+            'BB': self.BB,
+            'ERA': self.ERA,
+            'SV': self.SV,
+            'K': self.K
         }
 
-    def get_id(self, config) -> str:
+    def get_stats(self) -> dict:
         if (self.id == '') & (self.school != None):
-            school_player_ids = self.school.player_stat_ids(config) if self.school.stat_ids == None else self.school.stat_ids
-            if f'{self.first_name} {self.last_name}' in school_player_ids.keys():
-                self.id = school_player_ids[f'{self.first_name} {self.last_name}']
-        return self.id
-
-    def stats(self, config):
-        if self.id != '':
-            stat_dict = self.__stats
-            if self.school.league == 'NCAA':
-                ncaa_base_url = f'https://stats.ncaa.org/player/index?id={config["NCAA_STAT_YEAR"]}&stats_player_seq='
-                for i, stat_category_id in enumerate([config['NCAA_BATTING_STAT_ID'], config['NCAA_PITCHING_STAT_ID']]):
-                    self.stats_url = f'{ncaa_base_url}{self.id}&year_stat_category_id={stat_category_id}'
-                    html = cbn_utils.get(self.stats_url).text
-                    df = pd.read_html(html)[2]
-                    new_header = df.iloc[1] # grab the first row for the header
-                    df = df[2:] # take the data less the header row
-                    df.columns = new_header # set the header row as the df header
-                    df = df[df['Year'] == config['ACADEMIC_YEAR']]
-                    if len(df.index) == 1:
-                        if i == 0:
-                            df.rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG'}, axis = 1, inplace = True)
-                            df['OPS'] = 0.0
-                            df = df[self.__batting_stats]
-                        else:
-                            df.rename({'App': 'APP', 'H': 'HA', 'SO': 'K'}, axis = 1, inplace = True)
-                            df = df[self.__pitching_stats]
-                        stat_dict = stat_dict | df.fillna(0).to_dict(orient = 'records')[0]
-            else:
-                if self.school.league == 'NAIA':
-                    self.stats_url = f'https://naiastats.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
-                elif self.school.league == 'JUCO':
-                    self.stats_url = f'https://www.njcaa.org/sports/bsb/{config["ACADEMIC_YEAR"]}/div{self.school.division}/players/{self.id}?view=profile'
-                elif self.school.league == 'CCCAA':
-                    self.stats_url = f'https://www.cccaasports.org/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
-                elif self.school.league == 'NWAC':
-                    self.stats_url = f'https://nwacsports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
-                elif self.school.league == 'USCAA':
-                    self.stats_url = f'https://uscaa.prestosports.com/sports/bsb/{config["ACADEMIC_YEAR"]}/players/{self.id}?view=profile'
-                html = cbn_utils.get(self.stats_url).text
-                for df in pd.read_html(html):
-                    if 'Statistics category' in df.columns:
-                        pitching_stat_index = df[df['Statistics category'] == 'Appearances'].index.to_list()[0]
-                        batting_df = df.head(pitching_stat_index).set_index('Statistics category')
-                        batting_df.rename({'Games': 'G', 'At Bats': 'AB', 'Runs': 'R', 'Hits': 'H', 'Doubles': '2B', 'Triples': '3B', 'Home Runs': 'HR', 'Runs Batted In': 'RBI', 'Stolen Bases': 'SB', 'Batting Average': 'AVG', 'On Base Percentage': 'OBP', 'Slugging Percentage': 'SLG'}, inplace = True)
-                        batting_stat_dict = batting_df.filter(items = self.__batting_stats, axis = 0)['Overall'].replace('-', '0').to_dict()
-
-                        pitching_df = df.tail(len(df.index) - pitching_stat_index).set_index('Statistics category')
-                        pitching_df.rename({'Appearances': 'APP', 'Games Started': 'GS', 'Innings Pitched': 'IP', 'Wins': 'W', 'Losses': 'L', 'Earned Runs': 'ER', 'Hits': 'HA', 'Walks': 'BB', 'Earned Run Average': 'ERA', 'Saves': 'SV', 'Strikeouts': 'K'}, inplace = True)
-                        pitching_stat_dict = pitching_df.filter(items = self.__pitching_stats, axis = 0)['Overall'].replace('-', '0').to_dict()
-
-                        stat_dict = stat_dict | batting_stat_dict | pitching_stat_dict
-                        break
-            # Format to integers and rounded decimals
-            for key, value in stat_dict.items():
-                if key in ['AVG', 'OBP', 'SLG', 'IP', 'ERA']:
-                    stat_dict[key] = float(value)
-                else:
-                    stat_dict[key] = int(value)
-            stat_dict['OPS'] = stat_dict['OBP'] + stat_dict['SLG']
-            self.__stats = stat_dict
-        return self.__stats
+            if not isinstance(self.school.stats_df, pd.DataFrame):
+                self.school.get_stats_df()
+            stat_df_row = self.school.stats_df[
+                (self.school.stats_df['last_name'] == self.last_name) & (self.school.stats_df['first_name'] == self.first_name)
+            ]
+            if len(stat_df_row.index) > 0:
+                stat_dict = stat_df_row.fillna(0.0).to_dict(orient = 'records')[0]
+                self.id = str(stat_dict['id'])
+                self.G = int(stat_dict['G'])
+                self.AB = int(stat_dict['AB'])
+                self.R = int(stat_dict['R'])
+                self.H = int(stat_dict['H'])
+                self._2B = int(stat_dict['2B'])
+                self._3B = int(stat_dict['3B'])
+                self.HR = int(stat_dict['HR'])
+                self.RBI = int(stat_dict['RBI'])
+                self.SB = int(stat_dict['SB'])
+                self.AVG = '{0:.3f}'.format(stat_dict['AVG'])
+                self.AVG = self.AVG[1:] if self.AVG.startswith('0') else self.AVG
+                self.OBP = '{0:.3f}'.format(stat_dict['OBP'])
+                self.OBP = self.OBP[1:] if self.OBP.startswith('0') else self.OBP
+                self.SLG = '{0:.3f}'.format(stat_dict['SLG'])
+                self.SLG = self.SLG[1:] if self.SLG.startswith('0') else self.SLG
+                self.OPS = '{0:.3f}'.format(stat_dict['OPS'])
+                self.OPS = self.OPS[1:] if self.OPS.startswith('0') else self.OPS
+                self.APP = int(stat_dict['APP'])
+                self.GS = int(stat_dict['GS'])
+                self.IP = '{0:.1f}'.format(stat_dict['IP'])
+                self.W = int(stat_dict['W'])
+                self.L = int(stat_dict['L'])
+                self.ER = int(stat_dict['ER'])
+                self.HA = int(stat_dict['HA'])
+                self.BB = int(stat_dict['BB'])
+                self.ERA = '{0:.2f}'.format(stat_dict['ERA'], 2)
+                self.SV = int(stat_dict['SV'])
+                self.K = int(stat_dict['K'])
+        return {
+            'G': self.G,
+            'AB': self.AB,
+            'R': self.R,
+            'H': self.H,
+            '2B': self._2B,
+            '3B': self._3B,
+            'HR': self.HR,
+            'RBI': self.RBI,
+            'SB': self.SB,
+            'AVG': self.AVG,
+            'OBP': self.OBP,
+            'SLG': self.SLG,
+            'OPS': self.OPS,
+            'APP': self.APP,
+            'GS': self.GS,
+            'IP': self.IP,
+            'W': self.W,
+            'L': self.L,
+            'ER': self.ER,
+            'HA': self.HA,
+            'BB': self.BB,
+            'ERA': self.ERA,
+            'SV': self.SV,
+            'K': self.K
+        }
