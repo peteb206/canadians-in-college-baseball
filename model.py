@@ -59,12 +59,6 @@ class WebPage:
         url_split = self.__url__.split('#')
         self.__response__ = cbn_utils.get(url_split[0])
         if self.__response__ != None:
-            # if 'content-type' in self.__response__.headers.keys():
-            #     if 'application/json' in self.__response__.headers['content-type']:
-            #         json_to_dict: dict = json.loads(self.__response__.text)
-            #         if 'players' in json_to_dict.keys():
-            #             self.__html__ = pd.DataFrame(json_to_dict['players']).to_html()
-            #             return self.__html__
             self.__html__ = self.__response__.text
         return self.__html__
 
@@ -97,27 +91,32 @@ class RosterPage(WebPage):
     def __fetch_players__(self):
         if self.__players__ != None:
             # roster has already been fetched
-            return self.__players__
+            return
         html = super().html()
+        if (html[0] == '{') & (html[-1] == '}'): # Actually JSON, not HTML
+            # Parse roster JSON from API
+            self.__parse_sidearm_json__(html, from_api = True)
+            return
         roster_json_match = re.search('roster: (\{.*\}),.*\n', html)
         if roster_json_match != None:
             # Parse roster JSON
             self.__parse_sidearm_json__(roster_json_match[1])
-        else:
-            soup = BeautifulSoup(html, 'html.parser')
-            cards = soup.find_all('div', {'class': 's-person-card'})
-            if len(cards) > 0:
-                # Parse sidearm cards
-                self.__parse_s_person_cards__(cards)
-            else:
-                cards = soup.find_all('div', {'class': 'sidearm-roster-player-container'})
-                if len(cards) > 0:
-                    self.__parse_sidearm_cards__(cards)
-                elif soup.find('table'):
-                    # Parse HTML table
-                    self.__parse_table__(html)
+            return
+        soup = BeautifulSoup(html, 'html.parser')
+        cards = soup.find_all('div', {'class': 's-person-card'})
+        if len(cards) > 0:
+            # Parse sidearm cards
+            self.__parse_s_person_cards__(cards)
+            return
+        cards = soup.find_all('div', {'class': 'sidearm-roster-player-container'})
+        if len(cards) > 0:
+            self.__parse_sidearm_cards__(cards)
+            return
+        if soup.find('table'):
+            # Parse HTML table
+            self.__parse_table__(html)
 
-    def __parse_sidearm_json__(self, json_string: str):
+    def __parse_sidearm_json__(self, json_string: str, from_api: bool = False):
         self.__result__ += ' Parsed sidearm (roster JSON)'
         roster_json = json.loads(json_string)
         players_list = roster_json['players']
@@ -128,10 +127,10 @@ class RosterPage(WebPage):
             if is_canadian:
                 city, province = self.format_player_hometown(player_dict['hometown'])
             player = Player(
-                last_name = player_dict['last_name'],
-                first_name = player_dict['first_name'],
-                positions = self.format_player_position(player_dict['position_short']),
-                year = self.format_player_class(player_dict['academic_year_short'].lower()),
+                last_name = player_dict['lastName' if from_api else 'last_name'],
+                first_name = player_dict['firstName' if from_api else 'first_name'],
+                positions = self.format_player_position(player_dict['positionShort' if from_api else 'position_short']),
+                year = self.format_player_class(player_dict['academicYearShort' if from_api else 'academic_year_short'].lower()),
                 city = city,
                 province = province,
                 canadian = is_canadian
@@ -262,11 +261,11 @@ class RosterPage(WebPage):
         if cols[-1] == f'unnamed: {len(cols) - 1}':
             cols = ['ignore'] + cols[:-1]
         df.columns = cols
-        while df.columns.count('nan') > 1:
+        while list(df.columns).count('nan') > 1:
             new_header = [str(col).lower() for col in df.iloc[0]] # grab the first row for the header
             df = df[1:].copy() # take the data less the header row
             df.columns = new_header # set the header row as the df header
-        self.__result__ += f' Parsed table: | {" | ".join(df.columns)} |'
+        self.__result__ += f' Parsed table: | {" | ".join(list(df.columns))} |'
         df.dropna(axis = 0, how = 'all', inplace = True) # remove rows with all NaN
         cols = ['last_name', 'first_name', 'positions', 'bats', 'throws', 'year', 'city', 'province', 'canadian']
         for dictionary in df.to_dict(orient = 'records'):

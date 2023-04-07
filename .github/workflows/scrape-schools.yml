@@ -1,7 +1,7 @@
 name: scrape-schools
 on:
    schedule:
-      - cron: '0 1 * 11-7 1' # https://crontab.cronhub.io
+      - cron: '0 1 * 1-7,11-12 1' # https://crontab.guru
    workflow_dispatch:
 jobs:
    build:
