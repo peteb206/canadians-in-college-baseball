@@ -1,5 +1,9 @@
-name: cbn-scrape-stat-test
-on: workflow_dispatch
+name: unit-tests
+on:
+   schedule:
+      - cron: '0 15 * * 3,6' # https://crontab.cronhub.io
+   pull_request:
+   push:
 jobs:
    build:
       runs-on: ubuntu-latest
@@ -9,13 +13,13 @@ jobs:
          -  name: setup python
             uses: actions/setup-python@v2
             with:
-               python-version: '3.9.12' # install the python version needed
+               python-version: '3.11.2' # install the python version needed
          -  name: install python packages
             run: |
                python -m pip install --upgrade pip
                pip install -r requirements.txt
-         -  name: stat scrape python script
+         -  name: unit tests
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
             run: |
-               python -c 'from actions import stats; stats(fetch = True, update_google_sheet = True, copy_to_production = False)'
+               python unit_tests.py

@@ -11,12 +11,12 @@ import pandas as pd
 class GoogleSpreadsheet:
     def __init__(self):
         # get API key
-        self.__set_api_key('canadians-in-college-baseball-32cfc8392a02.json')
+        self.__set_api_key__('canadians-in-college-baseball-32cfc8392a02.json')
 
         # authorize the clientsheet
         self.__client: gspread.Client = gspread.authorize(
             ServiceAccountCredentials.from_json_keyfile_dict(
-                json.loads(os.environ['GOOGLE_CLOUD_API_KEY']),
+                json.loads(os.environ.get('GOOGLE_CLOUD_API_KEY')),
                 [
                     'https://spreadsheets.google.com/feeds',
                     'https://www.googleapis.com/auth/drive'
@@ -24,7 +24,7 @@ class GoogleSpreadsheet:
             )
         )
 
-    def __set_api_key(self, file_name: str):
+    def __set_api_key__(self, file_name: str):
         if os.path.isfile(file_name):
             with open(file_name) as f:
                 os.environ['GOOGLE_CLOUD_API_KEY'] = f.read()
@@ -86,25 +86,31 @@ class Sheet:
         all_values = self.to_list(include_header = True)
         return pd.DataFrame(all_values[1:], columns = all_values[0]) if len(all_values) > 0 else pd.DataFrame()
 
-    def delete_row(self, row_number: int):
-        try:
+    def delete_row(self, row_number: int, attempt = 1):
+        if attempt == 1:
+            try:
+                self.__sheet.delete_rows(row_number)
+            except gspread.exceptions.APIError:
+                cbn_utils.log('Too many gspread requests... pausing 2 minutes')
+                time.sleep(120)
+                cbn_utils.log('Resuming execution...')
+                self.delete_row(row_number, attempt = 2)
+        else:
             self.__sheet.delete_rows(row_number)
-        except gspread.exceptions.APIError:
-            cbn_utils.log('Too many gspread requests... pausing 1 minute')
-            time.sleep(60)
-            cbn_utils.log('Resuming execution...')
-            self.delete_row(row_number)
 
-    def update_cells(self, range_name: str, values = list()):
-        try:
+    def update_cells(self, range_name: str, values = list(), attempt = 1):
+        if attempt == 1:
+            try:
+                self.__sheet.update(range_name, values)
+            except gspread.exceptions.APIError:
+                cbn_utils.log('Too many gspread requests... pausing 2 minutes')
+                time.sleep(120)
+                cbn_utils.log('Resuming execution...')
+                self.update_cells(range_name, values = values, attempt = 2)
+        else:
             self.__sheet.update(range_name, values)
-        except gspread.exceptions.APIError:
-            cbn_utils.log('Too many gspread requests... pausing 1 minute')
-            time.sleep(60)
-            cbn_utils.log('Resuming execution...')
-            self.update_cells(range_name, values = values)
 
-    def update_data(self, new_data_df: pd.DataFrame, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0):
+    def update_data(self, new_data_df: pd.DataFrame, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0) -> tuple[pd.DataFrame, pd.DataFrame]:
         # Check types
         cbn_utils.check_arg_type(name = 'new_data_df', value = new_data_df, value_type = pd.DataFrame)
         cbn_utils.check_arg_type(name = 'with_filter', value = with_filter, value_type = bool)
@@ -112,18 +118,20 @@ class Sheet:
 
         # Compare existing and new data
         existing_data_df = self.to_df()[new_data_df.columns]
-        existing_data_df['row_number'] = (existing_data_df.index.to_series() + 2).astype(str)
+        existing_data_df['row_number'] = existing_data_df.index.to_series() + 2
         compare_data_df = pd.merge(existing_data_df, new_data_df, how = 'outer', indicator = 'source')
         change = False
 
         # Drop rows not found in new data
-        rows_to_delete_df = compare_data_df[compare_data_df['source'] == 'left_only']
+        rows_to_delete_df = compare_data_df[compare_data_df['source'] == 'left_only'].copy()
         number_of_rows_to_delete = len(rows_to_delete_df.index)
         if number_of_rows_to_delete > 0:
            change = True
+           self.__sheet.freeze(rows = 0, cols = 0) # Un-freeze header and columns
            cbn_utils.log(f'Deleting the following {number_of_rows_to_delete} rows:')
            print(rows_to_delete_df)
-           rows_to_delete_df['row_number'].apply(lambda row_number: self.delete_row(int(row_number)))
+           rows_to_delete_df.sort_values(by = 'row_number', ascending = False, inplace = True)
+           rows_to_delete_df['row_number'].apply(lambda row_number: self.delete_row(row_number))
 
         # Add rows not found in existing data
         rows_to_add_df = compare_data_df[compare_data_df['source'] == 'right_only'][new_data_df.columns]
@@ -137,7 +145,6 @@ class Sheet:
         # Format the sheet
         if change:
             self.__sheet.clear_basic_filter() # Remove previous data filter
-            self.__sheet.freeze(rows = 0, cols = 0) # Un-freeze header and columns
             row_count = len(existing_data_df.index) + number_of_rows_to_add - number_of_rows_to_delete + 1
             self.__sheet.resize(row_count) # Size so that there are no blank rows
             if with_filter:
@@ -149,6 +156,8 @@ class Sheet:
             if (row_count > 0) & (len(sort_by) > 0):
                 self.__sheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns), range = f'A2:{gspread.utils.rowcol_to_a1(row_count, len(columns))}')
             self.__sheet.columns_auto_resize(start_column_index = 0, end_column_index = len(columns) - 1) # Resize columns
+
+        return rows_to_delete_df[new_data_df.columns], rows_to_add_df
 
 google_spreadsheet = GoogleSpreadsheet()
 hub_spreadsheet = google_spreadsheet.spreadsheet(name = 'Canadians in College Baseball Hub V2')

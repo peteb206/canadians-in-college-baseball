@@ -5,6 +5,22 @@ import pandas as pd
 from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+urllib3 = requests.packages.urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Environment
+def env(key: str):
+    if os.path.isfile('.env'):
+        with open('.env') as f:
+            for line in f.read().split('\n'):
+                key_value_tuple = tuple(line.split('='))
+                if key_value_tuple[0] == key:
+                    return key_value_tuple[1]
+    return
+
+RUNNING_LOCALLY = env('LOCAL') == '1'
 
 # Requests
 session = requests.Session()
@@ -14,14 +30,33 @@ headers = {
 }
 
 def get(url: str, headers: dict[str, str] = headers, timeout: int = 60, verify: bool = True, attempt: int = 0):
+    def print_req_result(req: requests.Response):
+        if req == None:
+            print(f' - timed out after {timeout}s')
+        else:
+            print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
+
+    if not verify:
+        log(f'WARNING: sending unverified request to {url}')
+
     print(log_prefix(), 'GET', url, end = '')
+    req = None
     try:
         req = session.get(url, headers = headers, timeout = timeout, verify = verify)
-    except requests.exceptions.ReadTimeout: # 1 retry on timeout
+        print_req_result(req)
+    except requests.exceptions.SSLError:
+        print_req_result(req)
+        if verify:
+            return get(url, headers = headers, timeout = timeout, verify = False)
+    except (
+        requests.exceptions.ReadTimeout,
+        requests.exceptions.ConnectTimeout
+    ): # 1 retry on timeout
+        print_req_result(req)
         if attempt == 0:
-            print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
-            get(url, headers = headers, timeout = timeout * 2, verify = verify, attempt = 1)
-    print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
+            return get(url, headers = headers, timeout = timeout * 2, verify = verify, attempt = 1)
+    except requests.exceptions.ConnectionError:
+        print_req_result(req)
     return req
 
 # Labels
@@ -77,15 +112,15 @@ stats_labels = {
 
 # Functions
 def log(message: str):
-    print(log_prefix(), message)
+    print(log_prefix(), message) if RUNNING_LOCALLY else print(message)
 
 def log_prefix() -> str:
     return f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]} -'
 
-def check_arg_type(name='', value=None, value_type=None) -> bool:
+def check_arg_type(name = '', value = None, value_type = None) -> bool:
     assert type(value) == value_type, f'"{name}" argument must be of type {value_type.__name__}, NOT {type(value).__name__}'
 
-def check_string_arg(name='', value='', allowed_values=[], disallowed_values=[]) -> bool:
+def check_string_arg(name = '', value = '', allowed_values = [], disallowed_values = []) -> bool:
     passes, message = True, ''
     if len(allowed_values):
         if value not in allowed_values:
@@ -114,32 +149,44 @@ def strikethrough(x) -> str:
     return ''.join([character + '\u0336' for character in str(x)])
 
 # Email
-def send_results_email(diff_df: pd.DataFrame):
-    os.environ['EMAIL_SENDER'] = 'peteb206@gmail.com'
-    os.environ['EMAIL_RECIPIENT'] = 'peteb206@gmail.com'
-    os.environ['EMAIL_SENDER_PASSWORD'] = 'uvuklzplnvnypgbu'
+def player_scrape_results_email_html(added_df: pd.DataFrame, dropped_df: pd.DataFrame) -> str:
     now = datetime.now()
+    diff_cols = ['last_name', 'first_name', 'positions', 'year', 'city', 'province', 'school', 'league', 'division', 'state']
     new_line = '<div><br></div>'
-    added_df = diff_df[diff_df['diff'] == 'added']
-    dropped_df = diff_df[diff_df['diff'] == 'dropped']
 
     html = f'<div dir="ltr">Hey Bob,{new_line}'
     if len(added_df.index) + len(dropped_df.index) > 0:
         if len(added_df.index) > 0:
-            html += f'<div>Here are the new players who have been added to the list this week:<br></div><div>{added_df.drop("diff", axis = 1).to_html()}</div>{new_line * 2}'
+            added_df['division'] = added_df['division'].apply(lambda x: x if x in ['1', '2', '3'] else '') # don't print NAIA conferences
+            table = added_df.to_html(index = False, columns = diff_cols, justify = 'left')
+            html += f'<div>Here are the {len(added_df.index)} new players who have been added to the list this week:</div><div>{table}</div>{new_line * 2}'
         if len(dropped_df.index) > 0:
-            html += f'<div>These guys were dropped from the list because they were on the schools\' {now.year - 1} rosters but NOT on the updated {now.year} roster:</div><div>{dropped_df.drop("diff", axis = 1).to_html()}</div>{new_line * 2}'
+            dropped_df['division'] = dropped_df['division'].apply(lambda x: x if x in ['1', '2', '3'] else '') # don't print NAIA conferences
+            table = dropped_df.to_html(index = False, columns = diff_cols, justify = 'left')
+            html += f'<div>These {len(dropped_df.index)} guys were dropped from the list because they were on the schools\' {now.year - 1} rosters but NOT on the updated {now.year} roster:</div><div>{table}</div>{new_line * 2}'
+        html = html.replace('<table ', '<table style="border-collapsed: collapsed;" ') # TODO: get table border to look better... this doesn't seem to work
     else:
         html += f'<div>No new players were found by the scraper this week.</div>{new_line}'
     html += f'<div>Thanks,</div><div>Pete</div></div>'
+    return html
 
+def send_email(html: str):
+    # Ensure password is found
+    if os.environ.get('GMAIL_PASSWORD') == None:
+        os.environ['GMAIL_PASSWORD'] = env('GMAIL_PASSWORD')
+    if os.environ.get('GMAIL_PASSWORD') == None:
+        log('No Gmail password found')
+        return
+
+    # Send
     msg = MIMEText(html, 'html')
-    msg['Subject'] = f'New Players (Week of {now.strftime("%B %d, %Y")})'
-    msg['From'] = os.environ.get('EMAIL_SENDER')
-    msg['To'] = os.environ.get('EMAIL_RECIPIENT')
+    msg['Subject'] = f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})'
+    my_gmail = 'peteb206@gmail.com'
+    msg['From'] = f'CBN Scrape Results <{my_gmail}>'
+    msg['To'] = my_gmail
     smtp_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-    smtp_server.login(os.environ.get('EMAIL_SENDER'), os.environ.get('EMAIL_SENDER_PASSWORD'))
-    smtp_server.sendmail(os.environ.get('EMAIL_SENDER'), os.environ.get('EMAIL_RECIPIENT'), msg.as_string())
+    smtp_server.login(my_gmail, os.environ.get('GMAIL_PASSWORD'))
+    smtp_server.sendmail(my_gmail, my_gmail, msg.as_string())
     smtp_server.quit()
 
 # Canada logic
@@ -149,14 +196,14 @@ city_strings = {
 
 province_strings = {
     'Alberta': ['alberta', ', alta.', ', ab', 'a.b.'],
-    'British Columbia': ['british columbia', 'b.c', ' bc'],
+    'British Columbia': ['british columbia', 'b.c', ' bc', ',bc'],
     'Manitoba': ['manitoba', ', mb', ', man.'],
     'New Brunswick': ['new brunswick', ', nb', 'n.b.'],
     'Newfoundland & Labrador': ['newfoundland', 'nfld', ', nl'],
     'Nova Scotia': ['nova scotia', ', ns', 'n.s.' ],
-    'Ontario': [', ontario', ', on', ',on', '(ont)'],
+    'Ontario': [', ontario', ', on', ',on', '(ont)', ', o.n.'],
     'Prince Edward Island': ['prince edward island', 'p.e.i.'],
-    'Quebec': ['quebec', 'q.c.', ', qu', ', que.', ', qb'],
+    'Quebec': ['quebec', 'q.c.', ', qu', ', que.', ', qb', ', qc'],
     'Saskatchewan': ['saskatchewan', ', sask', ', sk', 's.k.']
 }
 
@@ -202,5 +249,10 @@ ignore_strings = [
     'las vegas, nb',
     'ontario, california',
     ', queens',
-    'bc high'
+    'bc high',
+    'new brunswick,',
+    'bca'
 ]
+
+def is_canadian(string: str) -> bool:
+    return bool(any(canada_string.lower() in string.lower() for canada_string in canada_strings)) & (not any(ignore_string in string.lower() for ignore_string in ignore_strings))
