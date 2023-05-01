@@ -3,6 +3,7 @@ on:
    schedule:
       - cron: '0 15 * * 3,6' # https://crontab.guru
    pull_request:
+   workflow_dispatch:
 jobs:
    build:
       runs-on: ubuntu-latest

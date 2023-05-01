@@ -18,9 +18,9 @@ def env(key: str):
                 key_value_tuple = tuple(line.split('='))
                 if key_value_tuple[0] == key:
                     return key_value_tuple[1]
-    return
 
 RUNNING_LOCALLY = env('LOCAL') == '1'
+now = datetime.now()
 
 # Requests
 session = requests.Session()
@@ -31,7 +31,7 @@ headers = {
 
 def get(url: str, headers: dict[str, str] = headers, timeout: int = 60, verify: bool = True, attempt: int = 0):
     def print_req_result(req: requests.Response):
-        if req == None:
+        if not isinstance(req, requests.Response):
             print(f' - timed out after {timeout}s')
         else:
             print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
@@ -117,10 +117,10 @@ def log(message: str):
 def log_prefix() -> str:
     return f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]} -'
 
-def check_arg_type(name = '', value = None, value_type = None) -> bool:
+def check_arg_type(name = '', value = None, value_type = None):
     assert type(value) == value_type, f'"{name}" argument must be of type {value_type.__name__}, NOT {type(value).__name__}'
 
-def check_string_arg(name = '', value = '', allowed_values = [], disallowed_values = []) -> bool:
+def check_string_arg(name = '', value = '', allowed_values = [], disallowed_values = []):
     passes, message = True, ''
     if len(allowed_values):
         if value not in allowed_values:
@@ -145,12 +145,16 @@ def check_list_arg(name='', values=[], allowed_values=[], disallowed_values=[]) 
                 message += f'"{name}" argument must NOT be from the following list: {disallowed_values}. "{value}" was provided. '
     assert passes, message
 
+def replace(string: str, dictionary: dict[str, str]) -> str:
+    for old, new in dictionary.items():
+        string = string.replace(old, new)
+    return string
+
 def strikethrough(x) -> str:
     return ''.join([character + '\u0336' for character in str(x)])
 
 # Email
 def player_scrape_results_email_html(added_df: pd.DataFrame, dropped_df: pd.DataFrame) -> str:
-    now = datetime.now()
     diff_cols = ['last_name', 'first_name', 'positions', 'year', 'city', 'province', 'school', 'league', 'division', 'state']
     new_line = '<div><br></div>'
 
@@ -170,7 +174,7 @@ def player_scrape_results_email_html(added_df: pd.DataFrame, dropped_df: pd.Data
     html += f'<div>Thanks,</div><div>Pete</div></div>'
     return html
 
-def send_email(html: str):
+def send_email(subject: str, html: str):
     # Ensure password is found
     if os.environ.get('GMAIL_PASSWORD') == None:
         os.environ['GMAIL_PASSWORD'] = env('GMAIL_PASSWORD')
@@ -180,7 +184,7 @@ def send_email(html: str):
 
     # Send
     msg = MIMEText(html, 'html')
-    msg['Subject'] = f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})'
+    msg['Subject'] = subject
     my_gmail = 'peteb206@gmail.com'
     msg['From'] = f'CBN Scrape Results <{my_gmail}>'
     msg['To'] = my_gmail
@@ -191,7 +195,8 @@ def send_email(html: str):
 
 # Canada logic
 city_strings = {
-    'Quebec': ['montreal', 'saint-hilaire']
+    'Quebec': ['montreal', 'saint-hilaire'],
+    'Manitoba': ['winnipeg']
 }
 
 province_strings = {
@@ -251,7 +256,8 @@ ignore_strings = [
     ', queens',
     'bc high',
     'new brunswick,',
-    'bca'
+    'bca',
+    'seoul, sk'
 ]
 
 def is_canadian(string: str) -> bool:

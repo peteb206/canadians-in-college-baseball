@@ -33,8 +33,8 @@ class WebPage:
         if self.redirected() == True:
             # Redirected
             status += f' {self.__REDIRECT_ICON__} {self.__response__.url}'
-        if self.__response__ == None:
-            status += f' {self.__ERROR_ICON__} - not fetched yet'
+        if not isinstance(self.__response__, requests.Response):
+            status += f' {self.__ERROR_ICON__} not fetched'
         elif self.success():
             status += f' {self.__SUCCESS_ICON__}'
         else:
@@ -63,10 +63,11 @@ class WebPage:
         return self.__html__
 
 class RosterPage(WebPage):
-    def __init__(self, url = ''):
+    def __init__(self, url = '', corrections: dict[str, str] = dict()):
         WebPage.__init__(self, url)
         self.__result__ = ''
         self.__players__: list[Player] = None
+        self.__corrections__ = corrections
         if url != '':
             self.__fetch_players__()
 
@@ -81,7 +82,7 @@ class RosterPage(WebPage):
 
     def to_df(self):
         players = self.players()
-        if players == None:
+        if not isinstance(players, list):
             return pd.DataFrame()
         return pd.DataFrame([player.to_dict() for player in players])
 
@@ -89,10 +90,13 @@ class RosterPage(WebPage):
         return self.__players__
 
     def __fetch_players__(self):
-        if self.__players__ != None:
+        if isinstance(self.__players__, list):
             # roster has already been fetched
             return
         html = super().html()
+        if len(html) == 0:
+            self.__players__ = list()
+            return
         if (html[0] == '{') & (html[-1] == '}'): # Actually JSON, not HTML
             # Parse roster JSON from API
             self.__parse_sidearm_json__(html, from_api = True)
@@ -113,7 +117,7 @@ class RosterPage(WebPage):
             self.__parse_sidearm_cards__(cards)
             return
         if soup.find('table'):
-            # Parse HTML table
+            # Parse HTML tableA
             self.__parse_table__(html)
 
     def __parse_sidearm_json__(self, json_string: str, from_api: bool = False):
@@ -153,7 +157,7 @@ class RosterPage(WebPage):
             if name_div:
                 a = name_div.find('a')
                 if a:
-                    first_name, last_name = self.format_player_name(a.text)
+                    first_name, last_name = self.format_player_name(cbn_utils.replace(a.text, self.__corrections__))
             details_div = person_div.find('div', {'class': 's-person-details__bio-stats'})
             if details_div:
                 for i, span in enumerate(details_div.find_all('span', {'class': 's-person-details__bio-stats-item'})):
@@ -194,15 +198,20 @@ class RosterPage(WebPage):
             province = ''
             is_canadian = False
             # Name
-            name_h3 = person_div.find('h3')
-            if name_h3:
-                a = name_h3.find('a')
-                if a:
-                    first_name, last_name = self.format_player_name(a.text)
-                else:
-                    span = name_h3.find('span')
-                    if span:
-                        first_name, last_name = self.format_player_name(span.text)
+            name_div = person_div.find('div', {'class': 'sidearm-roster-player-name'})
+            if name_div:
+                for h in ['h3', 'h2']:
+                    name_h = person_div.find(h)
+                    if name_h:
+                        a = name_h.find('a')
+                        if a:
+                            first_name, last_name = self.format_player_name(cbn_utils.replace(a.text, self.__corrections__))
+                            break
+                        else:
+                            span = name_h.find('span')
+                            if span:
+                                first_name, last_name = self.format_player_name(cbn_utils.replace(span.text, self.__corrections__))
+                                break
             # Position
             position_div = person_div.find('div', {'class': 'sidearm-roster-player-position'})
             if position_div:
@@ -219,6 +228,14 @@ class RosterPage(WebPage):
                 is_canadian = cbn_utils.is_canadian(hometown_span.text)
                 if is_canadian:
                     city, province = self.format_player_hometown(hometown_span.text)
+            else:
+                # For https://campbellsvilletigers.com/sports/baseball/roster/2023... delete when possible
+                hometown_span = person_div.find('span', {'class': 'sidearm-roster-player-custom1'})
+                if hometown_span:
+                    is_canadian = cbn_utils.is_canadian(hometown_span.text)
+                    if is_canadian:
+                        cbn_utils.log('WARNING: no span with class "sidearm-roster-player-hometown"... used "sidearm-roster-player-custom1" instead')
+                        city, province = self.format_player_hometown(hometown_span.text)
             player = Player(
                 last_name = last_name,
                 first_name = first_name,
@@ -243,8 +260,6 @@ class RosterPage(WebPage):
             index_str = url_split[-1]
             if index_str.isdigit():
                 df = dfs[int(index_str)]
-            else:
-                return # page doesn't have a parseable roster
         else:
             for df_ in dfs:
                 if len(df_.index) > max(len(df.index), 8): # Assuming a baseball roster should have 9+ players
@@ -294,7 +309,9 @@ class RosterPage(WebPage):
                         if ((key == 'name') & ('name.1' in dictionary.keys())) | ((key == 'name.1') & ('name' in dictionary.keys())):
                             first_name, last_name = dictionary['name'], dictionary['name.1']
                         else:
-                            first_name, last_name = self.format_player_name(value_str)
+                            for old, new in self.__corrections__.items():
+                                value_str = value_str.replace(old, new)
+                            first_name, last_name = self.format_player_name(cbn_utils.replace(value_str, self.__corrections__))
 
                     # Set positions column
                     elif key.startswith('po'):
@@ -430,14 +447,17 @@ class RosterPage(WebPage):
         if not formatted: # Province likely not listed, just get city
             city = string2.split(',')[0]
         city = re.sub(r'[^\w\-\s\.]', '', city).strip() # remove unwanted characters from city
+        if city == city.upper(): # convert from all-caps to proper case, if necessary
+            city = ' '.join([city_part[0].upper() + city_part[1:].lower() for city_part in city.split()])
 
-        cbn_utils.log(f'"{string}" converted to ---> City: "{city}" | Province: "{province}"')
+        cbn_utils.log(f'"{string}" parsed to ---> City: "{city}" | Province: "{province}"')
         return city, province 
 
 class StatsPage(WebPage):
-    def __init__(self, url = ''):
+    def __init__(self, url = '', corrections: dict[str, str] = dict()):
         WebPage.__init__(self, url)
         self.__df__: pd.DataFrame = None
+        self.__corrections__ = corrections
         if url != '':
             self.__fetch_stats__()
 
@@ -453,6 +473,8 @@ class StatsPage(WebPage):
         soup = BeautifulSoup(html, 'html.parser')
         if cbn_utils.NCAA_DOMAIN in url:
             hitting_table = soup.find('table', {'id': 'stat_grid'})
+            if hitting_table == None:
+                return
             hitting_df = pd.read_html(str(hitting_table))[0].replace('-', 0)
             hitting_df = hitting_df[hitting_df['GP'].astype(int) > 0]
             def get_ncaa_id(x):
@@ -474,8 +496,9 @@ class StatsPage(WebPage):
                 on = 'id',
                 suffixes = ['', 'A']
             )
-            df['last_name'] = df['Player'].apply(lambda x: x.split(', ')[0])
-            df['first_name'] = df['Player'].apply(lambda x: x.split(', ')[1])
+            df['Player'].replace(self.__corrections__, inplace = True)
+            df['last_name'] = df['Player'].apply(lambda x: RosterPage.format_player_name(x)[1])
+            df['first_name'] = df['Player'].apply(lambda x: RosterPage.format_player_name(x)[0])
             self.__df__ = df.drop('Player', axis = 1).fillna(0).rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG', 'App': 'APP', 'GS.1': 'GS', 'SO': 'K'}, axis = 1)
         else:
             hitting_df, pitching_df = None, None
@@ -505,8 +528,9 @@ class StatsPage(WebPage):
                 on = ['id', 'NAME'],
                 suffixes = ['', 'A']
             )
-            df['last_name'] = df['NAME'].apply(lambda x: ' '.join(x.split(' ')[-1:]))
-            df['first_name'] = df['NAME'].apply(lambda x: ' '.join(x.split(' ')[:-1]))
+            df['NAME'].replace(self.__corrections__, inplace = True)
+            df['last_name'] = df['NAME'].apply(lambda x: RosterPage.format_player_name(x)[1])
+            df['first_name'] = df['NAME'].apply(lambda x: RosterPage.format_player_name(x)[0])
             self.__df__ = df.drop('NAME', axis = 1).fillna(0)
         self.__df__['OPS'] = self.__df__.apply(lambda row: float(row['OBP']) + float(row['SLG']), axis = 1)
         return self.__df__
@@ -517,7 +541,7 @@ class School:
     school = School(name = 'U.S. Air Force Academy', league = 'NCAA', division = '1', state = 'CO', roster_page = Page(url = 'https://goairforcefalcons.com/sports/baseball/roster/2023'))
     school.players()
     '''
-    def __init__(self, id = '', name = '', league = '', division = '', state = '', roster_url = '', stats_url = ''):
+    def __init__(self, id = '', name = '', league = '', division = '', state = '', roster_url = '', stats_url = '', corrections: dict[str, str] = dict()):
         # Check types
         cbn_utils.check_arg_type(name = 'id', value = id, value_type = str)
         cbn_utils.check_arg_type(name = 'name', value = name, value_type = str)
@@ -538,12 +562,8 @@ class School:
         self.league = league
         self.division = division
         self.state = state
-        self.roster_page = RosterPage(roster_url)
-        # Only fetch stats if 1+ Canadians on roster
-        self.stats_page = None
-        if self.roster_page.players() != None:
-            if any(player.canadian for player in self.roster_page.players()):
-                self.stats_page = StatsPage(stats_url)
+        self.roster_page = RosterPage(roster_url, corrections = corrections) if roster_url != '' else None
+        self.stats_page = StatsPage(stats_url, corrections = corrections) if stats_url != '' else None
 
     def __repr__(self):
         return str({
@@ -554,17 +574,13 @@ class School:
         })
 
     def players(self) -> list:
-        players: list[Player] = list()
-        if self.roster_page.players() == None:
-            return players
-        for player in self.roster_page.players():
-            if (player.id == '') & (self.stats_page != None):
-                player.add_stats(self.stats_page)
-            players.append(player)
-        return players
+        if isinstance(self.roster_page, RosterPage):
+            if isinstance(self.roster_page.players(), list):
+                return self.roster_page.players()
+        return list()
 
 class Player:
-    def __init__(self, last_name = '', first_name = '', positions: list[str] = [], bats = '', throws = '', year = '', city = '', province = '', canadian: bool = False):
+    def __init__(self, last_name = '', first_name = '', positions: set[str] = set(), bats = '', throws = '', year = '', city = '', province = '', canadian = False, stats_id = ''):
         # Check types
         cbn_utils.check_arg_type(name = 'last_name', value = last_name, value_type = str)
         cbn_utils.check_arg_type(name = 'first_name', value = first_name, value_type = str)
@@ -575,6 +591,7 @@ class Player:
         cbn_utils.check_arg_type(name = 'city', value = city, value_type = str)
         cbn_utils.check_arg_type(name = 'province', value = province, value_type = str)
         cbn_utils.check_arg_type(name = 'canadian', value = canadian, value_type = bool)
+        cbn_utils.check_arg_type(name = 'stats_id', value = stats_id, value_type = str)
 
         # Check values
         cbn_utils.check_string_arg(name = 'last_name', value = last_name, disallowed_values = [''])
@@ -595,7 +612,7 @@ class Player:
         self.city = city
         self.province = province
         self.canadian = canadian
-        self.id = ''
+        self.id = stats_id
         self.G = 0
         self.AB = 0
         self.R = 0
@@ -669,6 +686,8 @@ class Player:
 
     def add_stats(self, stats_page: StatsPage):
         stats_df = stats_page.to_df()
+        if not isinstance(stats_df, pd.DataFrame):
+            return
         stat_dict_list = stats_df[(stats_df['last_name'].str.lower() == self.last_name.lower()) & (stats_df['first_name'].str.lower() == self.first_name.lower())].to_dict(orient = 'records')
         if len(stat_dict_list) == 0:
             return
