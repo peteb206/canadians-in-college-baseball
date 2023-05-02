@@ -1,5 +1,8 @@
-name: cbn-scrape-sheet-only
-on: workflow_dispatch
+name: update-players-sheet
+on:
+   schedule:
+      - cron: '0 15 * 1-7,11-12 1' # https://crontab.guru
+   workflow_dispatch:
 jobs:
    build:
       runs-on: ubuntu-latest
@@ -9,13 +12,13 @@ jobs:
          -  name: setup python
             uses: actions/setup-python@v2
             with:
-               python-version: '3.9.12' # install the python version needed
+               python-version: '3.11.2' # install the python version needed
          -  name: install python packages
             run: |
                python -m pip install --upgrade pip
                pip install -r requirements.txt
-         -  name: roster scrape python script
+         -  name: scrape players
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
             run: |
-               python -c 'from actions import players, stats; players(fetch = False, update_google_sheet = True, copy_to_production = True); stats(fetch = False, update_google_sheet = True, copy_to_production = True)'
+               python -c 'import google_sheets; google_sheets.update_canadians_sheet();'
