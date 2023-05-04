@@ -52,15 +52,15 @@ config = {row['key']: row['value'] for _, row in df(hub_spreadsheet.worksheet('C
 
 def set_sheet_header(worksheet: gspread.Worksheet, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0):
     worksheet.clear_basic_filter() # Remove previous data filter
-    df = df(worksheet)
-    row_count = len(df.index) + 1
+    df_ = df(worksheet)
+    row_count = len(df_.index) + 1
     worksheet.resize(row_count) # Size so that there are no blank rows
     if with_filter:
         worksheet.freeze(rows = 1, cols = freeze_cols) # Freeze header and x cols
         worksheet.set_basic_filter(f'1:{row_count}') # Add data filter to first row
     elif freeze_cols > 0:
         worksheet.freeze(cols = freeze_cols) # Freeze x cols
-    columns = df.columns
+    columns = list(df_.columns)
     if (row_count > 0) & (len(sort_by) > 0):
         worksheet.sort(*tuple((columns.index(col) + 1, 'asc') for col in sort_by if col in columns), range = f'A2:{gspread.utils.rowcol_to_a1(row_count, len(columns))}')
     worksheet.columns_auto_resize(start_column_index = 0, end_column_index = len(columns) - 1) # Resize column

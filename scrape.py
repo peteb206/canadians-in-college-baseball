@@ -161,9 +161,8 @@ def players():
     cols = ['school', 'last_name', 'first_name', 'positions', 'bats', 'throws', 'year', 'city', 'province', 'school_roster_url']
 
     # Manual corrections
-    corrections = {
-        row['key']: row['valye'] for _, row in google_sheets.df(google_sheets.hub_spreadsheet.worksheet(name = 'Corrections')).iterrows()
-    }
+    corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
+    corrections = dict(zip(corrections_df['From'], corrections_df['To']))
 
     added_rows_df = pd.DataFrame(columns = cols)
     deleted_rows_df = added_rows_df.copy()
@@ -198,7 +197,7 @@ def players():
         if (school.roster_page.redirected() == False) & (len(players) > 0):
             # Successful
             # Get existing values
-            players_df = players_worksheet.to_df()[cols]
+            players_df = google_sheets.df(players_worksheet)[cols]
             existing_school_canadians_df: pd.DataFrame = players_df[players_df['school'] == school_series['stats_url']].copy()
             existing_school_canadians_df['row'] = existing_school_canadians_df.index.to_series() + 2
             existing_school_canadians_df['positions'] = existing_school_canadians_df['positions'].str.upper() # INF is converted to inf
@@ -210,16 +209,15 @@ def players():
             scraped_school_canadians_df['school_roster_url'] = roster_url
             scraped_school_canadians_df['positions'] = scraped_school_canadians_df['positions'].apply(lambda x: '/'.join(x)) # Convert list to "/" delimited string
             school_canadians_df = scraped_school_canadians_df.merge(
-                existing_school_canadians_df[['school', 'last_name', 'first_name', 'year', 'throws', 'city', 'province']],
+                existing_school_canadians_df[['school', 'last_name', 'first_name', 'positions', 'year', 'throws', 'city', 'province']],
                 how = 'left',
                 on = ['school', 'last_name', 'first_name'],
                 suffixes = ['_fetched', '']
             )
             school_canadians_df.fillna('', inplace = True)
-            school_canadians_df['year'] = school_canadians_df.apply(lambda row: row['year'] if row['year'] != '' else row['year_fetched'], axis = 1) # Use saved year, if possible
-            school_canadians_df['throws'] = school_canadians_df.apply(lambda row: row['throws'] if row['throws'] != '' else row['throws_fetched'], axis = 1) # Use saved throws, if possible
-            school_canadians_df['city'] = school_canadians_df.apply(lambda row: row['city'] if row['city'] != '' else row['city_fetched'], axis = 1) # Use saved city, if possible
-            school_canadians_df['province'] = school_canadians_df.apply(lambda row: row['province'] if row['province'] != '' else row['province_fetched'], axis = 1) # Use saved province, if possible
+            for attribute in ['positions', 'year', 'throws', 'city', 'province']:
+                # Use saved attribute, if not blank (allows for manual fixes in Google Sheets)
+                school_canadians_df[attribute] = school_canadians_df.apply(lambda row: row[attribute] if row[attribute] != '' else row[f'{attribute}_fetched'], axis = 1).astype(object)
 
             # Compare and add/delete rows as needed
             compare_df = existing_school_canadians_df.merge(school_canadians_df, how = 'outer', indicator = 'source')
@@ -250,9 +248,8 @@ def stats():
         players_df = google_sheets.df(players_worksheet)
 
         # Manual corrections
-        corrections = {
-            row['key']: row['valye'] for _, row in google_sheets.df(google_sheets.hub_spreadsheet.worksheet(name = 'Corrections')).iterrows()
-        }
+        corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
+        corrections = dict(zip(corrections_df['From'], corrections_df['To']))
 
         for stats_url in players_df['school'].unique():
             try:
