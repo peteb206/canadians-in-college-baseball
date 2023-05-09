@@ -88,6 +88,7 @@ def update_canadians_sheet():
 
     players_df.drop_duplicates(subset = ['roster_url', 'last_name', 'first_name'], inplace = True) # keep first (highest league for a school)
     players_df.rename({'positions': 'Position', 'name': 'School', 'state': 'State'}, axis = 1, inplace = True)
+    players_df.sort_values(by = ['last_name', 'first_name'], ignore_index = True, inplace = True)
     players_df['Name'] = players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
     players_df['Hometown'] = players_df.apply(lambda row: f'{row["city"]}, {row["province"]}' if (row['city'] != '') & (row['province'] != '') else row['city'] if row['city'] != '' else row['province'], axis = 1)
 
@@ -452,6 +453,19 @@ def format_sheet(spreadsheet: gspread.Spreadsheet, worksheet: gspread.Worksheet,
             }
         })
 
+    # Resize number of rows
+    requests.append({
+        'updateSheetProperties': {
+            'properties': {
+                'sheetId': worksheet._properties['sheetId'],
+                'gridProperties': {
+                    'rowCount': total_rows
+                },
+            },
+            'fields': 'gridProperties(rowCount)',
+        }
+    })
+
     # Last Updated
     requests.append({
         'repeatCell': {
@@ -481,11 +495,11 @@ def format_sheet(spreadsheet: gspread.Spreadsheet, worksheet: gspread.Worksheet,
     })
 
 def copy_and_paste_sheet(destination_spreadsheet: gspread.Spreadsheet, source_worksheet: gspread.Worksheet, destination_worksheet: gspread.Worksheet):
-    copied_worksheet = source_worksheet.copy_to(destination_spreadsheet._properties['id'])
+    copied_worksheet = source_worksheet.copy_to(destination_spreadsheet._properties['id']) # Copy to new, temporary sheet
     destination_spreadsheet.batch_update(
         {
             'requests': [
-                {
+                { # Copy from temporary sheet to permanent sheet
                     'copyPaste': {
                         'source': {
                             'sheetId': copied_worksheet['sheetId']
@@ -495,7 +509,17 @@ def copy_and_paste_sheet(destination_spreadsheet: gspread.Spreadsheet, source_wo
                         },
                         'pasteType': 'PASTE_NORMAL'
                     }
-                }, {
+                }, { # Resize number of rows
+                    'updateSheetProperties': {
+                        'properties': {
+                            'sheetId': destination_worksheet._properties['sheetId'],
+                            'gridProperties': {
+                                'rowCount': len(source_worksheet.get_all_values())
+                            },
+                        },
+                        'fields': 'gridProperties(rowCount)',
+                    }
+                }, { # Delete temporary sheet
                     'deleteSheet': {
                         'sheetId': copied_worksheet['sheetId']
                     }

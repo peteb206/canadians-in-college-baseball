@@ -1,7 +1,7 @@
 name: scrape-schools
 on:
-   schedule:
-      - cron: '0 1 * 1-7,11-12 1' # https://crontab.guru
+   # schedule:
+      # - cron: '0 1 * 1-7,11-12 1' # https://crontab.guru
    workflow_dispatch:
 jobs:
    build:
@@ -13,6 +13,7 @@ jobs:
             uses: actions/setup-python@v2
             with:
                python-version: '3.11.2' # install the python version needed
+               cache: 'pip' # caching pip dependencies
          -  name: install python packages
             run: |
                python -m pip install --upgrade pip
@@ -27,4 +28,4 @@ jobs:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
                GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
             run: |
-               python -c 'import scrape; scrape.reset_roster_scrape_results(); scrape.schools();'
+               python -c 'import scrape; scrape.schools();'
