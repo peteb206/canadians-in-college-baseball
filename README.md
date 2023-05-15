@@ -13,6 +13,8 @@ Export results to Google Sheets and display using gspread package.
 
 ## Technical Details
 ### Automation
+Using GitHub Actions
+#### Unit Tests
 [![unit-tests](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/unit-tests.yml)
 #### Players
 [![scrape-schools](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/scrape-schools.yml/badge.svg)](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/scrape-schools.yml)

@@ -1,7 +1,7 @@
 name: unit-tests
 on:
    schedule:
-      - cron: '0 15 * * 3,6' # https://crontab.guru
+      - cron: '0 15 * * 0,4' # https://crontab.guru
    pull_request:
    workflow_dispatch:
 jobs:
