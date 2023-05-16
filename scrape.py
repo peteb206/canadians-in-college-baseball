@@ -246,13 +246,13 @@ def players():
     cbn_utils.send_email(f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html)
 
 def stats():
+    # Manual corrections
+    corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
+    corrections = dict(zip(corrections_df['From'], corrections_df['To']))
+
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
-
-        # Manual corrections
-        corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
-        corrections = dict(zip(corrections_df['From'], corrections_df['To']))
 
         for stats_url in players_df['school'].unique():
             try:
@@ -272,11 +272,13 @@ def stats():
 
 if __name__ == '__main__':
     # schools()
+
     options = ['y', 'n']
-    selection = ''
-    while selection not in options:
-        selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
-    if selection == options[0]:
-        reset_roster_scrape_results()
-    players()
+    # selection = ''
+    # while selection not in options:
+    #     selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
+    # if selection == options[0]:
+    #     reset_roster_scrape_results()
+    # players()
+
     # stats()

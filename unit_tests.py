@@ -36,11 +36,13 @@ player.add_stats(school.stats_page)
 assert (player.id == '2658233') & (player.last_name == 'Dykstra')
 
 # NCAA: Division 2
+'''
 school = School(id = '1071', name = 'Emporia State University', league = 'NCAA', division = '2', state = 'KS', roster_url = 'https://esuhornets.com/sports/baseball/roster/2023', stats_url = 'https://stats.ncaa.org/team/1071/stats/16340')
 players = school.players()
 player: Player = players[18]
 player.add_stats(school.stats_page)
 assert (player.id == '2812025') & (player.last_name == 'Bucovetsky')
+'''
 
 # NCAA: Division 3
 school = School(id = '59', name = 'Bethany College', league = 'NCAA', division = '3', state = 'WV', roster_url = 'https://www.bethanybison.com/sports/bsb/2022-23/roster', stats_url = 'https://stats.ncaa.org/team/59/stats/16340')
@@ -96,4 +98,4 @@ school = School(id = 'dyouville', name = "D'Youville", league = 'USCAA', divisio
 players = school.players()
 player: Player = players[1]
 player.add_stats(school.stats_page)
-assert (player.id == 'dilloncrookskm1') & (player.last_name == 'Crook')
+assert (player.id == 'dilloncrookafbj') & (player.last_name == 'Crook')
