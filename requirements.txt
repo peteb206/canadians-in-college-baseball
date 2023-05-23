@@ -2,13 +2,13 @@
 # python==3.11.2
 
 # Web Scraping
-requests==2.28.1
-beautifulsoup4==4.11.1
-lxml==4.9.1
+requests==2.28.2
+beautifulsoup4==4.12.1
+lxml==4.9.2
 html5lib==1.1
 
 # Data Manipulation
-pandas==1.4.4
+pandas==1.5.3
 
 # Google Sheets API
 gspread==5.7.1

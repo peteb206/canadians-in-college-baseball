@@ -217,10 +217,7 @@ def players():
             school_canadians_df.fillna('', inplace = True)
             for attribute in ['positions', 'year', 'throws', 'city', 'province']:
                 # Use saved attribute, if not blank (allows for manual fixes in Google Sheets)
-                try:
-                    school_canadians_df[attribute] = school_canadians_df.apply(lambda row: row[attribute] if row[attribute] != '' else row[f'{attribute}_fetched'], axis = 1).astype(object)
-                except ValueError as e:
-                    cbn_utils.log(f'ERROR: issue with attribute "{attribute}"... dataframe columns: {", ".join([col for col in school_canadians_df.columns])}')
+                school_canadians_df[attribute] = school_canadians_df.apply(lambda row: row[attribute] if row[attribute] != '' else row[f'{attribute}_fetched'], axis = 1).astype(object)
 
             # Compare and add/delete rows as needed
             compare_df = existing_school_canadians_df.merge(school_canadians_df, how = 'outer', indicator = 'source')
@@ -269,6 +266,7 @@ def stats():
                         players_worksheet.update(f'K{i + 2}:AI{i + 2}', [[player.id] + stat_values])
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {stats_url} - {str(e)}')
+            time.sleep(1)
 
 if __name__ == '__main__':
     # schools()
