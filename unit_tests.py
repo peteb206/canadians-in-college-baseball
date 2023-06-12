@@ -17,7 +17,7 @@ assert players[1].last_name == 'Takayoshi'
 # Sidearm Cards (sidearm-roster-player-container)
 roster_page = RosterPage('https://ecupirates.com/sports/baseball/roster/2023')
 players = roster_page.players()
-assert players[2].last_name == 'Chrismon'
+assert players[1].last_name == 'Chrismon'
 
 # Table
 roster_page = RosterPage('https://www.fullertontitans.com/sports/m-basebl/2022-23/roster')
