@@ -92,7 +92,7 @@ player.add_stats(school.stats_page)
 assert (player.id == 'brockrindlisbacher1s1s') & (player.last_name == 'Rindlisbacher')
 
 # USCAA
-school = School(id = 'dyouville', name = "D'Youville", league = 'USCAA', division = '', state = 'NY', roster_url = 'https://athletics.dyc.edu/sports/bsb/2022-23/roster', stats_url = 'https://uscaa.prestosports.com/sports/bsb/2022-23/teams/dyouville?view=lineup')
+school = School(id = 'dyouville', name = "D'Youville", league = 'USCAA', division = '', state = 'NY', roster_url = 'https://dyusaints.com/sports/baseball/roster/2023', stats_url = 'https://uscaa.prestosports.com/sports/bsb/2022-23/teams/dyouville?view=lineup')
 players = school.players()
 player: Player = players[1]
 player.add_stats(school.stats_page)
