@@ -197,7 +197,8 @@ def players():
         if (school.roster_page.redirected() == False) & (len(players) > 0):
             # Successful
             # Get existing values
-            players_df = google_sheets.df(players_worksheet)[cols]
+            time.sleep(0.3)
+            players_df = google_sheets.df(players_worksheet)
             existing_school_canadians_df: pd.DataFrame = players_df[players_df['school'] == school_series['stats_url']].copy()
             existing_school_canadians_df['row'] = existing_school_canadians_df.index.to_series() + 2
             existing_school_canadians_df['positions'] = existing_school_canadians_df['positions'].str.upper() # INF is converted to inf
@@ -221,12 +222,14 @@ def players():
 
             # Compare and add/delete rows as needed
             compare_df = existing_school_canadians_df.merge(school_canadians_df, how = 'outer', indicator = 'source')
-            rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'].copy()
+            # Only delete if removed from roster and no stats accumulated
+            rows_to_delete_df = compare_df[(compare_df['source'] == 'left_only') & (compare_df['G'] + compare_df['APP'] == 0)].copy()
             time.sleep(len(rows_to_delete_df.index))
             rows_to_delete_df['row'].apply(lambda x: players_worksheet.delete_rows(int(x)))
             deleted_rows_df = pd.concat([deleted_rows_df, rows_to_delete_df[cols]], ignore_index = True)
             rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][cols]
             if len(rows_to_add_df.index):
+                time.sleep(1)
                 players_worksheet.append_rows(rows_to_add_df.values.tolist())
             added_rows_df = pd.concat([added_rows_df, rows_to_add_df], ignore_index = True)
 
@@ -272,11 +275,11 @@ if __name__ == '__main__':
     # schools()
 
     options = ['y', 'n']
-    # selection = ''
-    # while selection not in options:
-    #     selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
-    # if selection == options[0]:
-    #     reset_roster_scrape_results()
-    # players()
+    selection = ''
+    while selection not in options:
+        selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
+    if selection == options[0]:
+        reset_roster_scrape_results()
+    players()
 
     # stats()
