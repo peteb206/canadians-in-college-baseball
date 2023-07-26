@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup, element
 import pandas as pd
 import json
 import re
-urllib3 = requests.packages.urllib3
+from urllib.parse import urljoin, urlparse
 
 class WebPage:
     # Class variables
@@ -481,7 +481,7 @@ class StatsPage(WebPage):
                 try: return hitting_table.find('a', text = x)['href'].split('stats_player_seq=')[-1]
                 except: return ''
             hitting_df['id'] = hitting_df['Player'].apply(lambda x: get_ncaa_id(x))
-            url_parts = urllib3.util.parse_url(url)
+            url_parts = urlparse(url)
             pitching_stats_page = WebPage(url = f'{url_parts.scheme}://{url_parts.netloc}{soup.find("a", text = "Pitching")["href"]}')
             html = pitching_stats_page.html()
             soup = BeautifulSoup(html, 'html.parser')
@@ -534,6 +534,41 @@ class StatsPage(WebPage):
             self.__df__ = df.drop('NAME', axis = 1).fillna(0)
         self.__df__['OPS'] = self.__df__.apply(lambda row: float(row['OBP']) + float(row['SLG']), axis = 1)
         return self.__df__
+
+class SchedulePage(WebPage):
+    def __init__(self, url = ''):
+        WebPage.__init__(self, url)
+        soup = BeautifulSoup(self.html(), 'html.parser')
+        self.box_score_links = {urljoin(url, a['href']) for a in soup.find_all('a') if ('/boxscore' in a['href'].replace('_', '') if a.has_attr('href') else False)}
+
+class BoxScore(WebPage):
+    def __init__(self, url = '', corrections: dict[str, str] = dict()):
+        WebPage.__init__(self, url)
+        soup = BeautifulSoup(self.html(), 'html.parser')
+        positions = list()
+
+        for tr in soup.find_all('tr'):
+            tds = tr.find_all('td')
+            if len(tds) > 1:
+                a = tds[0].find('a')
+                if a != None:
+                    if '/player/' in a['href']:
+                        for position in tds[1].text.upper().split('/'):
+                            positions.append({
+                                'player': ' '.join(cbn_utils.replace(re.sub('\s\s+', ' ', a.text), corrections).split(', ')[::-1]),
+                                'positions': position
+                            })
+
+        for th in soup.find_all('th'):
+            a = th.find('a')
+            if a != None:
+                position_span = th.find('span')
+                if ('/players' in a['href']) & (position_span != None):
+                    for position in position_span.text.upper().split('/'):
+                        positions.append({'player': cbn_utils.replace(a.text, corrections), 'positions': position})
+
+        self.positions_df = pd.DataFrame(positions, columns = ['player', 'positions'])
+        self.positions_df['url'] = url
 
 class School:
     '''

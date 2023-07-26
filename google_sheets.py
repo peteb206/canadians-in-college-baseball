@@ -3,7 +3,6 @@ import os
 import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import time
 from datetime import datetime
 import re
 import pandas as pd
@@ -287,6 +286,149 @@ def update_stats_sheet():
     year_worksheet = year_spreadsheet.get_worksheet(0)
     copy_and_paste_sheet(year_spreadsheet, canadians_in_college_stats_worksheet, year_worksheet)
 
+def create_ballot_sheet():
+    players_worksheet = hub_spreadsheet.worksheet('Players')
+    players_manual_spreadsheet = hub_spreadsheet.worksheet('Players (Manual)')
+    schools_worksheet = hub_spreadsheet.worksheet('Schools')
+    players_df = pd.merge(
+        pd.concat([df(players_worksheet), df(players_manual_spreadsheet)]),
+        df(schools_worksheet), how = 'inner', left_on = 'school', right_on = 'stats_url'
+    ) \
+        .drop_duplicates(subset = ['last_name', 'first_name', 'roster_url']) \
+        .sort_values(by = ['last_name', 'first_name'], ignore_index = True) \
+        .rename({'name': 'School'}, axis = 1)
+    players_df['Name'] = players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
+
+    pitchers_df = players_df[(players_df['APP'].replace('', 0).astype(int) > 0) & (players_df['IP'].replace('', 0).astype(float) >= 10)]
+    hitters_df = players_df[players_df['G.C'] != ''].copy()
+    hitters_df['primaryPosition'] = hitters_df[['G.C', 'G.1B', 'G.2B', 'G.3B', 'G.SS', 'G.OF', 'G.DH']] \
+        .astype(int).idxmax(axis = 1, numeric_only = True).apply(lambda x: x.replace('G.', ''))
+
+    ballot_groups = [
+        ('Right-handers', (pitchers_df['throws'] == 'R') & (pitchers_df['GS'].astype(int) / pitchers_df['APP'].astype(int) >= 0.5)),
+        ('Left-handers', (pitchers_df['throws'] == 'L') & (pitchers_df['GS'].astype(int) / pitchers_df['APP'].astype(int) >= 0.5)),
+        ('Relievers', pitchers_df['GS'].astype(int) / pitchers_df['APP'].astype(int) < 0.5),
+        ('Catchers', hitters_df['primaryPosition'] == 'C'),
+        ('First basemen', hitters_df['primaryPosition'] == '1B'),
+        ('Second basemen', hitters_df['primaryPosition'] == '2B'),
+        ('Third basemen', hitters_df['primaryPosition'] == '3B'),
+        ('Shortstops', hitters_df['primaryPosition'] == 'SS'),
+        ('Outfielders', hitters_df['primaryPosition'] == 'OF'),
+        ('Designated hitters', hitters_df['primaryPosition'] == 'DH')
+    ]
+    pitcher_cols = ['Name', 'School'] + list(cbn_utils.stats_labels['pitching'].keys())
+    hitter_cols = ['Name', 'School'] + list(cbn_utils.stats_labels['batting'].keys())
+
+    data = list()
+    for ballot_group, mask in ballot_groups:
+        data.append([ballot_group])
+        if ballot_group in ['Right-handers', 'Left-handers', 'Relievers']: # Pitchers
+            data.append(['G' if col == 'APP' else 'H' if col == 'HA' else col for col in pitcher_cols])
+            data += pitchers_df[mask][pitcher_cols].values.tolist()
+        else: # Hitters
+            data.append(hitter_cols)
+            data += hitters_df[mask][hitter_cols].values.tolist()
+        if ballot_group == 'Outfielders':
+            data += [[], ['9 Choices'], ['3 1st'], ['3 2nd'], ['3 3rd'], ['Write-in'], [], [], []]
+        else:
+            data += [[], ['3 Choices'], ['1'], ['2'], ['3'], ['Write-in'], [], [], []]
+    data.pop()
+
+    ballot_spreadsheet = google_spreadsheet.spreadsheet(name = f'All-Canadian Ballot {config["YEAR"]}')
+    ballot_worksheet = ballot_spreadsheet.add_worksheet('New', rows = 1, cols = 1)
+    old_worksheet = ballot_spreadsheet.get_worksheet(0)
+    ballot_spreadsheet.del_worksheet(old_worksheet)
+    ballot_worksheet.update_title('Ballot')
+    ballot_worksheet.insert_rows(data)
+
+    # Formatting
+    ballot_worksheet.columns_auto_resize(start_column_index = 0, end_column_index = 2) # Resize column
+    requests = [{
+        'updateDimensionProperties': {
+            'range': {
+                'sheetId': ballot_worksheet._properties['sheetId'],
+                'dimension': 'COLUMNS',
+                'startIndex': 2,
+                'endIndex': 15
+            },
+            'properties': {
+                'pixelSize': 50
+            },
+            'fields': 'pixelSize'
+        }
+    }]
+
+    for header in ballot_worksheet.findall(re.compile(r'^(' + '|'.join([x[0] for x in ballot_groups]) + r')$')):
+        # Position group
+        range_ = {
+            'sheetId': ballot_worksheet._properties['sheetId'],
+            'startColumnIndex': 0,
+            'endColumnIndex': 1,
+            'startRowIndex': header.row - 1,
+            'endRowIndex': header.row
+        }
+        requests.append({
+            'repeatCell': {
+                'range': range_.copy(),
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': {
+                            'red': 0.92,
+                            'green': 0.92,
+                            'blue': 0.92
+                        },
+                        'textFormat': {
+                            'bold': True
+                        }
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat)',
+            }
+        })
+        # Stats column headers
+        range_['startRowIndex'] += 1
+        range_['endRowIndex'] += 1
+        range_['endColumnIndex'] = 15
+        requests.append({
+            'repeatCell': {
+                'range': range_.copy(),
+                'cell': {
+                    'userEnteredFormat': {
+                        'textFormat': {
+                            'bold': True
+                        }
+                    }
+                },
+                'fields': 'userEnteredFormat(textFormat)',
+            }
+        })
+
+    for cell in ballot_worksheet.findall(re.compile(r'^(3 Choices|9 Choices|Write-in)$')):
+        # 3 Choices / Write-in
+        requests.append({
+            'repeatCell': {
+                'range': {
+                    'sheetId': ballot_worksheet._properties['sheetId'],
+                    'startColumnIndex': 0,
+                    'endColumnIndex': 1,
+                    'startRowIndex': cell.row - 1,
+                    'endRowIndex': cell.row
+                },
+                'cell': {
+                    'userEnteredFormat': {
+                        'textFormat': {
+                            'bold': True
+                        }
+                    }
+                },
+                'fields': 'userEnteredFormat(textFormat)',
+            }
+        })
+
+    ballot_spreadsheet.batch_update({
+        'requests': requests
+    })
+
 def format_sheet(spreadsheet: gspread.Spreadsheet, worksheet: gspread.Worksheet, total_rows: int, summary_data_rows: int, col_widths_dict: dict[str, int]):
     requests = list()
 
@@ -528,6 +670,7 @@ def copy_and_paste_sheet(destination_spreadsheet: gspread.Spreadsheet, source_wo
         }
     )
 
-if __name__ == '__main__':
-    update_canadians_sheet()
-    update_stats_sheet()
+# if __name__ == '__main__':
+#     update_canadians_sheet()
+#     update_stats_sheet()
+#     create_ballot_sheet()

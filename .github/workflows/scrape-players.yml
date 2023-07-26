@@ -1,7 +1,7 @@
 name: scrape-players
 on:
    schedule:
-      - cron: '0 12 * 1-7,11-12 1' # https://crontab.guru
+      - cron: '0 12 * 1-7,10-12 1' # https://crontab.guru
    workflow_dispatch:
 jobs:
    build:

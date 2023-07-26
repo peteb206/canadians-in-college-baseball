@@ -1,10 +1,11 @@
 import google_sheets
 import cbn_utils
-from model import School, Player, StatsPage
+from model import School, Player, StatsPage, SchedulePage, BoxScore
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
 import time
+import re
 
 pd.set_option('display.max_columns', None) # show all cols
 pd.set_option('display.max_colwidth', None) # show full width of showing cols
@@ -271,15 +272,54 @@ def stats():
                 cbn_utils.log(f'ERROR: Player.add_stats - {stats_url} - {str(e)}')
             time.sleep(1)
 
-if __name__ == '__main__':
-    # schools()
+def positions():
+    # Manual corrections
+    corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
+    corrections = dict(zip(corrections_df['From'], corrections_df['To']))
 
-    options = ['y', 'n']
-    selection = ''
-    while selection not in options:
-        selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
-    if selection == options[0]:
-        reset_roster_scrape_results()
-    players()
+    positions_df = pd.DataFrame(columns = ['url', 'player', 'positions'])
+    for sheet_name in ['Players (Manual)', 'Players']:
+        players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
+        players_df = google_sheets.df(players_worksheet)
+        # Don't search for positions if not going to be on ballot anyway or if already fetched their positions count
+        players_df = players_df[(players_df['G.C'] == '') & (players_df['AB'].replace('', 0).astype(int) > 0)]
 
-    # stats()
+        for stats_url in players_df['school'].unique():
+            schedule_url = re.sub(
+                r'^(.*)/team/(.*)/stats/(.*)$',
+                r'\1/player/game_by_game?game_sport_year_ctl_id=\3&org_id=\2&stats_player_seq=-100',
+                stats_url.replace('?view=lineup', '?view=gamelog')
+            )
+            schedule_page = SchedulePage(schedule_url)
+            for box_score_url in schedule_page.box_score_links:
+                if box_score_url not in positions_df['url']:
+                    box_score_page = BoxScore(url = box_score_url, corrections = corrections)
+                    box_score_page.positions_df['positions'].replace({'LF': 'OF', 'CF': 'OF', 'RF': 'OF'}, inplace = True)
+                    positions_df = pd.concat([positions_df, box_score_page.positions_df]) \
+                        .drop_duplicates(subset = ['player', 'url', 'positions'], ignore_index = True)
+                    time.sleep(1)
+
+            positions_df2 = positions_df[positions_df['url'].isin(schedule_page.box_score_links)].groupby(['player', 'positions']).count().reset_index()
+            player_games_by_position_df = positions_df2.pivot(index = 'player', columns = 'positions', values = 'url').fillna(0).astype(int)
+            for i, player_row in players_df[players_df['school'] == stats_url].iterrows():
+                if f'{player_row["first_name"]} {player_row["last_name"]}' in player_games_by_position_df.index:
+                    players_worksheet.update(
+                        f'AJ{i + 2}:AP{i + 2}',
+                        [player_games_by_position_df.loc[f'{player_row["first_name"]} {player_row["last_name"]}', ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH']].values.tolist()]
+                    )
+                    time.sleep(1)
+
+# if __name__ == '__main__':
+#     schools()
+
+#     options = ['y', 'n']
+#     selection = ''
+#     while selection not in options:
+#         selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
+#     if selection == options[0]:
+#         reset_roster_scrape_results()
+#     players()
+
+#     stats()
+
+#     positions()
