@@ -282,7 +282,7 @@ class RosterPage(WebPage):
             df.columns = new_header # set the header row as the df header
         self.__result__ += f' Parsed table: | {" | ".join(list(df.columns))} |'
         df.dropna(axis = 0, how = 'all', inplace = True) # remove rows with all NaN
-        cols = ['last_name', 'first_name', 'positions', 'bats', 'throws', 'year', 'city', 'province', 'canadian']
+        cols = ['last_name', 'first_name', 'positions', 'throws', 'year', 'city', 'province', 'canadian']
         for dictionary in df.to_dict(orient = 'records'):
             last_name = ''
             first_name = ''
@@ -317,7 +317,7 @@ class RosterPage(WebPage):
                     elif key.startswith('po'):
                         positions = self.format_player_position(value_str.upper())
 
-                    # Set bats and throws column
+                    # Set throws column
                     elif (key.startswith('b')) & (not key.startswith('bi')) & ('t' in key):
                         throws = self.format_player_handedness(value_str[-1])
                     elif (key == 't') | key.startswith('throw') | key.startswith('t/'):
@@ -615,12 +615,11 @@ class School:
         return list()
 
 class Player:
-    def __init__(self, last_name = '', first_name = '', positions: set[str] = set(), bats = '', throws = '', year = '', city = '', province = '', canadian = False, stats_id = ''):
+    def __init__(self, last_name = '', first_name = '', positions: set[str] = set(), throws = '', year = '', city = '', province = '', canadian = False, stats_id = ''):
         # Check types
         cbn_utils.check_arg_type(name = 'last_name', value = last_name, value_type = str)
         cbn_utils.check_arg_type(name = 'first_name', value = first_name, value_type = str)
         cbn_utils.check_arg_type(name = 'positions', value = positions, value_type = set)
-        cbn_utils.check_arg_type(name = 'bats', value = bats, value_type = str)
         cbn_utils.check_arg_type(name = 'throws', value = throws, value_type = str)
         cbn_utils.check_arg_type(name = 'year', value = year, value_type = str)
         cbn_utils.check_arg_type(name = 'city', value = city, value_type = str)
@@ -632,7 +631,6 @@ class Player:
         cbn_utils.check_string_arg(name = 'last_name', value = last_name, disallowed_values = [''])
         cbn_utils.check_string_arg(name = 'first_name', value = first_name, disallowed_values = [''])
         cbn_utils.check_list_arg(name = 'positions', values = positions, allowed_values = ['', 'P', 'C', '1B', '2B', '3B', 'SS', 'INF', 'LF', 'CF', 'RF', 'OF', 'DH', 'UTIL'])
-        cbn_utils.check_string_arg(name = 'bats', value = bats, allowed_values = ['', 'R', 'L', 'B'])
         cbn_utils.check_string_arg(name = 'throws', value = throws, allowed_values = ['', 'R', 'L', 'B'])
         cbn_utils.check_string_arg(name = 'year', value = year, allowed_values = ['', 'Redshirt', 'Freshman', 'Sophomore', 'Junior', 'Senior'])
         cbn_utils.check_string_arg(name = 'province', value = province, allowed_values = ['', 'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick', 'Newfoundland & Labrador', 'Nova Scotia', 'Ontario', 'Prince Edward Island', 'Quebec', 'Saskatchewan'])
@@ -640,7 +638,6 @@ class Player:
         self.last_name = last_name
         self.first_name = first_name
         self.positions = positions
-        self.bats = bats
         self.throws = throws
         self.year = year
         self.school: School = None
@@ -682,7 +679,6 @@ class Player:
             'last_name': self.last_name,
             'first_name': self.first_name,
             'positions': self.positions,
-            'bats': self.bats,
             'throws': self.throws,
             'year': self.year,
             'city': self.city,

@@ -46,7 +46,7 @@ def df(worksheet: gspread.Worksheet) -> pd.DataFrame:
     return pd.DataFrame()
 
 google_spreadsheet = GoogleSpreadsheet()
-hub_spreadsheet = google_spreadsheet.spreadsheet(name = 'Canadians in College Baseball Hub V2')
+hub_spreadsheet = google_spreadsheet.spreadsheet(name = 'Canadians in College Baseball Hub')
 config = {row['key']: row['value'] for _, row in df(hub_spreadsheet.worksheet('Configuration')).iterrows()}
 
 def set_sheet_header(worksheet: gspread.Worksheet, sort_by: list = [], with_filter: bool = True, freeze_cols: int = 0):
@@ -92,10 +92,11 @@ def update_canadians_sheet():
     players_df['Hometown'] = players_df.apply(lambda row: f'{row["city"]}, {row["province"]}' if (row['city'] != '') & (row['province'] != '') else row['city'] if row['city'] != '' else row['province'], axis = 1)
 
     # initialize summary data
+    now = datetime.now()
     summary_data = [
-        ['Canadian Baseball Network', '', '', '', f'Last updated: {datetime.now().strftime("%B %d, %Y")}'],
-        ['Pete Berryman', '', '', '', ''],
-        blank_row,
+        ['Canadian Baseball Network', '', '', '', f'Last updated: {now.strftime("%B %d, %Y")}'],
+        ['Pete Berryman', '', '', '', '' if now.year == config['YEAR'] else (u'\u26A0' + ' If a player is missing from this list, it could be because')],
+        ['', '', '', '', '' if now.year == config['YEAR'] else f'many schools have not yet posted their {config["YEAR"]} rosters.'],
         ['Total', f'{len(players_df.index)} players', '', '', ''],
         blank_row
     ]

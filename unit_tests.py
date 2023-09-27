@@ -20,9 +20,9 @@ players = roster_page.players()
 assert players[2].last_name == 'Chrismon'
 
 # Table
-roster_page = RosterPage('https://www.fullertontitans.com/sports/m-basebl/2022-23/roster')
+roster_page = RosterPage('https://athletics.pensacolastate.edu/sports/bsb/2022-23/roster')
 players = roster_page.players()
-assert players[0].last_name == 'Lew'
+assert players[0].last_name == 'Ryals'
 
 ###################################################################################################
 # School
@@ -57,11 +57,11 @@ player.add_stats(school.stats_page)
 assert (player.id == 'hiloyamamoto4wu6') & (player.last_name == 'Yamamoto')
 
 # JUCO: Division 1
-school = School(id = 'bossierparishcommunitycollege', name = 'Bossier Parish', league = 'JUCO', division = '1', state = 'LA', roster_url = 'https://bpcc.prestosports.com/sports/bsb/2022-23/roster', stats_url = 'https://www.njcaa.org/sports/bsb/2022-23/div1/teams/bossierparishcommunitycollege?view=lineup')
+school = School(id = 'trinidadstatecollege', name = 'Trinidad State', league = 'JUCO', division = '1', state = 'CO', roster_url = 'https://tsctrojans.com/sports/bsb/2022-23/roster', stats_url = 'https://www.njcaa.org/sports/bsb/2022-23/div1/teams/trinidadstatecollege?view=lineup')
 players = school.players()
-player: Player = players[0]
+player: Player = players[3]
 player.add_stats(school.stats_page)
-assert (player.id == 'dreamaral1zlf') & (player.last_name == 'Amaral')
+assert (player.id == 'benjisauve82v1') & (player.last_name == 'Sauve')
 
 # JUCO: Division 2
 school = School(id = 'prairiestatecollege', name = 'Prairie State', league = 'JUCO', division = '2', state = 'IL', roster_url = 'https://prairiestateathletics.com/sports/baseball/roster/2023', stats_url = 'https://www.njcaa.org/sports/bsb/2022-23/div2/teams/prairiestatecollege?view=lineup')

@@ -35,7 +35,6 @@ def schools():
         df['id'] = df['orgId'].astype(str)
         df['division'] = df['division'].astype(str)
         df['state'] = df['memberOrgAddress'].apply(lambda x: x['state'])
-        df['site_domain'] = df['athleticWebUrl'].apply(lambda x: x.replace('www.', ''))
         return compare_and_join(df.sort_values(by = ['division', 'name'], ignore_index = True))
 
     def get_other_schools(league: str) -> pd.DataFrame:
@@ -63,7 +62,7 @@ def schools():
                     'id': name.lower().replace(' ', '') if len(url_split) == 0 else url_split[-1],
                     'name': name,
                     'league': league,
-                    'division': url_split[-3] if league == 'NAIA' else ''
+                    'division': url_split[-3] if (league == 'NAIA') & (len(url_split) > 2) else ''
                 })
         return compare_and_join(pd.DataFrame(schools))
 
@@ -159,7 +158,7 @@ def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
     schools_df = google_sheets.df(schools_worksheet)
     players_worksheet = google_sheets.hub_spreadsheet.worksheet('Players')
-    cols = ['school', 'last_name', 'first_name', 'positions', 'bats', 'throws', 'year', 'city', 'province', 'school_roster_url']
+    cols = ['school', 'last_name', 'first_name', 'positions', 'throws', 'year', 'city', 'province', 'school_roster_url']
 
     # Manual corrections
     corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
@@ -267,7 +266,7 @@ def stats():
                     if player.id != '':
                         # Update player stats
                         stat_values = list(player.to_dict().values())[15:]
-                        players_worksheet.update(f'K{i + 2}:AI{i + 2}', [[player.id] + stat_values])
+                        players_worksheet.update(f'J{i + 2}:AH{i + 2}', [[player.id] + stat_values])
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {stats_url} - {str(e)}')
             time.sleep(1)
@@ -304,7 +303,7 @@ def positions():
             for i, player_row in players_df[players_df['school'] == stats_url].iterrows():
                 if f'{player_row["first_name"]} {player_row["last_name"]}' in player_games_by_position_df.index:
                     players_worksheet.update(
-                        f'AJ{i + 2}:AP{i + 2}',
+                        f'AI{i + 2}:AO{i + 2}',
                         [player_games_by_position_df.loc[f'{player_row["first_name"]} {player_row["last_name"]}', ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH']].values.tolist()]
                     )
                     time.sleep(1)
