@@ -240,8 +240,8 @@ def players():
 
     # Email results to self
     schools_df.rename({'name': 'school'}, axis = 1, inplace = True)
-    added_rows_df = added_rows_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url')
-    deleted_rows_df = deleted_rows_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url')
+    added_rows_df = added_rows_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
+    deleted_rows_df = deleted_rows_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
     email_html = cbn_utils.player_scrape_results_email_html(added_rows_df, deleted_rows_df)
     cbn_utils.send_email(f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html)
 
