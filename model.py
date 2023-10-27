@@ -117,7 +117,7 @@ class RosterPage(WebPage):
             self.__parse_sidearm_cards__(cards)
             return
         if soup.find('table'):
-            # Parse HTML tableA
+            # Parse HTML table
             self.__parse_table__(html)
 
     def __parse_sidearm_json__(self, json_string: str, from_api: bool = False):
@@ -499,40 +499,43 @@ class StatsPage(WebPage):
             df['Player'].replace(self.__corrections__, inplace = True)
             df['last_name'] = df['Player'].apply(lambda x: RosterPage.format_player_name(x)[1])
             df['first_name'] = df['Player'].apply(lambda x: RosterPage.format_player_name(x)[0])
+            df['OPS'] = df.OBPct.astype(float) + df.SlgPct.astype(float)
             self.__df__ = df.drop('Player', axis = 1).fillna(0).rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG', 'App': 'APP', 'GS.1': 'GS', 'SO': 'K'}, axis = 1)
         else:
-            hitting_df, pitching_df = None, None
+            combined_df = None
             for table in soup.find_all('table'):
-                df = pd.read_html(str(table))[0].replace('-', 0)
-                if 'ab' in df.columns:
-                    # Hitting
-                    ids_dict = {re.sub(' +', ' ', a.text.replace('\n', '').replace('\r', '').strip()): a['href'].split('/')[-1] for a in table.find_all('a') if '/players/' in a['href']}
-                    ids_dict_keys = list(ids_dict.keys())
-                    hitting_df = df.rename({col: col.upper() for col in df.columns}, axis = 1)
-                    hitting_df = hitting_df[~hitting_df['NAME'].isin(['Totals', 'Opponent'])]
-                    hitting_df['NAME'] = hitting_df['NAME'].apply(lambda x: re.sub(' +', ' ', x))
-                    hitting_df['id'] = hitting_df['NAME'].apply(lambda x: ids_dict[x] if x in ids_dict_keys else '')
-                elif 'ip' in df.columns:
-                    # Pitching
-                    ids_dict = {re.sub(' +', ' ', a.text.replace('\n', '').replace('\r', '').strip()): a['href'].split('/')[-1] for a in table.find_all('a') if '/players/' in a['href']}
-                    ids_dict_keys = list(ids_dict.keys())
-                    pitching_df = df.rename({col: col.upper() for col in df.columns}, axis = 1)
-                    pitching_df = pitching_df[~pitching_df['NAME'].isin(['Totals', 'Opponent'])]
-                    pitching_df['NAME'] = pitching_df['NAME'].apply(lambda x: re.sub(' +', ' ', x))
-                    pitching_df['id'] = pitching_df['NAME'].apply(lambda x: ids_dict[x] if x in ids_dict_keys else '')
-                    break
-            df = pd.merge(
-                hitting_df[['id', 'NAME', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'AVG', 'OBP', 'SLG']],
-                pitching_df[['id', 'NAME', 'APP', 'GS', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'K']],
-                how = 'outer',
-                on = ['id', 'NAME'],
-                suffixes = ['', 'A']
-            )
-            df['NAME'].replace(self.__corrections__, inplace = True)
-            df['last_name'] = df['NAME'].apply(lambda x: RosterPage.format_player_name(x)[1])
-            df['first_name'] = df['NAME'].apply(lambda x: RosterPage.format_player_name(x)[0])
-            self.__df__ = df.drop('NAME', axis = 1).fillna(0)
-        self.__df__['OPS'] = self.__df__.apply(lambda row: float(row['OBP']) + float(row['SLG']), axis = 1)
+                player_stat_table = False
+                for a in table.find_all('a'):
+                    if '/players/' in a['href']:
+                        player_stat_table = True
+                        break
+                if player_stat_table:
+                    ids_dict = {re.sub(' +', ' ', a.text.replace('\n', '').replace('\r', '').strip()): a['href'].split('/')[-1]
+                                for a in table.find_all('a') if '/players/' in a['href']}
+                    df = pd.read_html(str(table))[0].replace('-', 0).query('~Name.isin(["Totals", "Opponent"])')
+                    df.rename({col: 'G' if col == 'gp' else col.upper() for col in df.columns}, axis = 1, inplace = True)
+                    if 'AB' in df.columns:
+                        df.drop(['BB', 'K'], axis = 1, inplace = True)
+                    elif 'APP' in df.columns:
+                        df.rename({'H': 'HA'}, axis = 1, inplace = True)
+                    df.NAME = df.NAME.apply(lambda x: re.sub(' +', ' ', x))
+                    df['id'] = df.NAME.apply(lambda x: ids_dict[x] if x in ids_dict.keys() else '')
+                    if type(combined_df) == pd.DataFrame:
+                        combined_df = combined_df.merge(df.loc[:, ['id', 'NAME'] + [col for col in df.columns if col not in combined_df.columns]],
+                                                        how = 'outer', on = ['id', 'NAME'])
+                    else:
+                        combined_df = df.copy()
+            combined_df.NAME.replace(self.__corrections__, inplace = True)
+            combined_df['last_name'] = combined_df.NAME.apply(lambda x: RosterPage.format_player_name(x)[1])
+            combined_df['first_name'] = combined_df.NAME.apply(lambda x: RosterPage.format_player_name(x)[0])
+            combined_df['OPS'] = combined_df.OBP.astype(float) + combined_df.SLG.astype(float)
+            if 'W' not in combined_df.columns: # TODO: remove this whenever NAIA/CCCAA stats pages start tracking W, L, SV, BB again
+                combined_df['W'] = 0
+                combined_df['L'] = 0
+                combined_df['SV'] = 0
+                combined_df['BB'] = 0
+            stat_cols = [col for stat_type in cbn_utils.stats_labels.keys() for col in cbn_utils.stats_labels[stat_type].keys()]
+            self.__df__ = combined_df.fillna(0).loc[:, ['id', 'last_name', 'first_name'] + stat_cols]
         return self.__df__
 
 class SchedulePage(WebPage):
