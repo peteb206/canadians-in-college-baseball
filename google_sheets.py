@@ -244,7 +244,7 @@ def update_stats_sheet():
                 df_filtered = df_filtered[df_filtered[stat] > 0] # Eliminate 0's
 
             if len(df_filtered.index) > 0:
-                df_filtered.sort_values(by = stat, ascending = (stat == 'ERA'), ignore_index = True, inplace = True)
+                df_filtered.sort_values(by = [stat, 'last_name', 'first_name'], ascending = [stat == 'ERA', True, True], ignore_index = True, inplace = True)
 
                 cutoff = df_filtered[stat].iloc[9] if len(df_filtered.index) >= 10 else df_filtered[stat].iloc[-1]
                 df_filtered = df_filtered[df_filtered[stat] <= cutoff] if stat == 'ERA' else df_filtered[df_filtered[stat] >= cutoff]

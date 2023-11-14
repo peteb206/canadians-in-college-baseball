@@ -1,7 +1,5 @@
 # canadians-in-college-baseball
-Python web scraper for the Canadian Baseball Network
-
-[Full project write-up](https://peteb206.github.io/projects/canadians-in-college-baseball/)
+Python web scraper for the Canadian Baseball Network... [view full project description](https://peteb206.github.io/projects/canadians-in-college-baseball/)
 
 ## [Canadians in College Baseball](https://www.canadianbaseballnetwork.com/canadian-baseball-network-canadians-in-college)
 [![scrape-schools](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/scrape-schools.yml/badge.svg)](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/scrape-schools.yml)
