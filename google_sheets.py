@@ -96,7 +96,7 @@ def update_canadians_sheet():
     summary_data = [
         ['Canadian Baseball Network', '', '', '', f'Last updated: {now.strftime("%B %d, %Y")}'],
         ['Pete Berryman', '', '', '', '' if str(now.year) == config['YEAR'] else (u'\u26A0' + ' If a player is missing from this list, it could be because')],
-        ['', '', '', '', '' if now.year == config['YEAR'] else f'many schools have not yet posted their {config["YEAR"]} rosters.'],
+        ['', '', '', '', '' if str(now.year) == config['YEAR'] else f'many schools have not yet posted their {config["YEAR"]} rosters.'],
         ['Total', f'{len(players_df.index)} players', '', '', ''],
         blank_row
     ]
