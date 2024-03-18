@@ -530,11 +530,9 @@ class StatsPage(WebPage):
                 combined_df['last_name'] = combined_df.NAME.apply(lambda x: RosterPage.format_player_name(x)[1])
                 combined_df['first_name'] = combined_df.NAME.apply(lambda x: RosterPage.format_player_name(x)[0])
                 combined_df['OPS'] = combined_df.OBP.astype(float) + combined_df.SLG.astype(float)
-                if 'W' not in combined_df.columns: # TODO: remove this whenever NAIA/CCCAA stats pages start tracking W, L, SV, BB again
-                    combined_df['W'] = 0
-                    combined_df['L'] = 0
-                    combined_df['SV'] = 0
-                    combined_df['BB'] = 0
+                for col in ['W', 'L', 'SV', 'BB']: # TODO: remove this whenever NAIA/CCCAA stats pages start tracking W, L, SV, BB again
+                    if col not in combined_df.columns:
+                        combined_df[col] = 0
                 stat_cols = [col for stat_type in cbn_utils.stats_labels.keys() for col in cbn_utils.stats_labels[stat_type].keys()]
                 self.__df__ = combined_df.fillna(0).loc[:, ['id', 'last_name', 'first_name'] + stat_cols]
         return self.__df__
