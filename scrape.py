@@ -265,7 +265,7 @@ def stats():
                     player.add_stats(stats_page)
                     if player.id != '':
                         # Update player stats
-                        stat_values = list(player.to_dict().values())[15:]
+                        stat_values = list(player.to_dict().values())[14:]
                         players_worksheet.update(f'J{i + 2}:AH{i + 2}', [[player.id] + stat_values])
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {stats_url} - {str(e)}')
