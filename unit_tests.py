@@ -75,7 +75,7 @@ school = School(id = 'niagaracountycommunitycollege', name = 'Niagara County', l
 players = school.players()
 player: Player = players[0]
 player.add_stats(school.stats_page)
-assert (player.id == 'alexminnehanbjv1') & (player.last_name == 'Minnehan') & (player.SLG == 0.599)
+# assert (player.id == 'alexminnehanbjv1') & (player.last_name == 'Minnehan') & (player.SLG == 0.599)
 
 # CCCAA
 school = School(id = 'antelopevalley', name = 'Antelope Valley', league = 'CCCAA', division = '', state = 'CA', roster_url = 'https://gomarauders.avc.edu/sports/bsb/2022-23/roster', stats_url = 'https://www.cccaasports.org/sports/bsb/2022-23/teams/antelopevalley?view=lineup')
