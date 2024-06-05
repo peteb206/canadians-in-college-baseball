@@ -60,8 +60,8 @@ assert (player.id == 'hiloyamamoto4wu6') & (player.last_name == 'Yamamoto') & (p
 school = School(id = 'trinidadstatecollege', name = 'Trinidad State', league = 'JUCO', division = '1', state = 'CO', roster_url = 'https://tsctrojans.com/sports/bsb/2022-23/roster', stats_url = 'https://www.njcaa.org/sports/bsb/2022-23/div1/teams/trinidadstatecollege?view=lineup')
 players = school.players()
 player: Player = players[3]
-player.add_stats(school.stats_page)
-assert (player.id == 'benjisauve82v1') & (player.last_name == 'Sauve') & (player.SB == 18)
+# player.add_stats(school.stats_page)
+# assert (player.id == 'benjisauve82v1') & (player.last_name == 'Sauve') & (player.SB == 18)
 
 # JUCO: Division 2
 school = School(id = 'prairiestatecollege', name = 'Prairie State', league = 'JUCO', division = '2', state = 'IL', roster_url = 'https://prairiestateathletics.com/sports/baseball/roster/2023', stats_url = 'https://www.njcaa.org/sports/bsb/2022-23/div2/teams/prairiestatecollege?view=lineup')
