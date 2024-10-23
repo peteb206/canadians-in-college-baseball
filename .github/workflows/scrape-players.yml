@@ -26,6 +26,5 @@ jobs:
          -  name: scrape players
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
-               GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
             run: |
                python -c 'import scrape; scrape.reset_roster_scrape_results(); scrape.schools(); scrape.players();'

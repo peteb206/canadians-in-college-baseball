@@ -1,7 +1,7 @@
-name: scrape-schools
+name: send-added-players-email
 on:
-   # schedule:
-      # - cron: '0 1 * 1-7,11-12 1' # https://crontab.guru
+   schedule:
+      - cron: '0 23 * 1-7,10-12 0' # https://crontab.guru
    workflow_dispatch:
 jobs:
    build:
@@ -18,14 +18,9 @@ jobs:
             run: |
                python -m pip install --upgrade pip
                pip install -r requirements.txt
-         -  name: unit tests
-            env:
-               GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
-            run: |
-               python unit_tests.py
-         -  name: scrape schools
+         -  name: send added players email
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
                GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
             run: |
-               python -c 'import scrape; scrape.schools();'
+               python -c 'import scrape; scrape.email_additions();'
