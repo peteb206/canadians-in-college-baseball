@@ -450,7 +450,7 @@ class RosterPage(WebPage):
         if city == city.upper(): # convert from all-caps to proper case, if necessary
             city = ' '.join([city_part[0].upper() + city_part[1:].lower() for city_part in city.split()])
 
-        cbn_utils.log(f'"{string}" parsed to ---> City: "{city}" | Province: "{province}"')
+        cbn_utils.log(f'   "{string}" parsed to ---> City: "{city}" | Province: "{province}"')
         return city, province 
 
 class StatsPage(WebPage):
@@ -545,21 +545,20 @@ class SchedulePage(WebPage):
 
 class BoxScore(WebPage):
     def __init__(self, url = '', corrections: dict[str, str] = dict()):
+        url = url.replace('box_score', 'individual_stats')
         WebPage.__init__(self, url)
         soup = BeautifulSoup(self.html(), 'html.parser')
         positions = list()
 
-        for tr in soup.find_all('tr'):
-            tds = tr.find_all('td')
-            if len(tds) > 1:
-                a = tds[0].find('a')
-                if a != None:
-                    if '/player/' in a['href']:
-                        for position in tds[1].text.upper().split('/'):
-                            positions.append({
-                                'player': ' '.join(cbn_utils.replace(re.sub('\s\s+', ' ', a.text), corrections).split(', ')[::-1]),
-                                'positions': position
-                            })
+        for table in soup.find_all('table'):
+            for tr in table.find_all('tr'):
+                tds = tr.find_all('td')
+                if len(tds) > 1:
+                    a = tds[1].find('a')
+                    if a != None:
+                        if '/players/' in a['href']:
+                            for position in tds[2].text.upper().split('/'):
+                                positions.append({'player': cbn_utils.replace(a.text.strip(), corrections), 'positions': position.strip()})
 
         for th in soup.find_all('th'):
             a = th.find('a')
@@ -570,6 +569,8 @@ class BoxScore(WebPage):
                         positions.append({'player': cbn_utils.replace(a.text, corrections), 'positions': position})
 
         self.positions_df = pd.DataFrame(positions, columns = ['player', 'positions'])
+        self.positions_df = self.positions_df.drop_duplicates()
+        self.positions_df = self.positions_df[self.positions_df['positions'] != '']
         self.positions_df['url'] = url
 
 class School:

@@ -154,20 +154,16 @@ def strikethrough(x) -> str:
     return ''.join([character + '\u0336' for character in str(x)])
 
 # Email
-def player_scrape_results_email_html(added_df: pd.DataFrame, dropped_df: pd.DataFrame) -> str:
+def player_scrape_results_email_html(added_df: pd.DataFrame) -> str:
     diff_cols = ['last_name', 'first_name', 'positions', 'year', 'city', 'province', 'school', 'league', 'division', 'state']
     new_line = '<div><br></div>'
 
     html = f'<div dir="ltr">Hey Bob,{new_line}'
-    if len(added_df.index) + len(dropped_df.index) > 0:
+    if len(added_df.index) > 0:
         if len(added_df.index) > 0:
             added_df['division'] = added_df['division'].apply(lambda x: x if x in ['1', '2', '3'] else '') # don't print NAIA conferences
             table = added_df.to_html(index = False, columns = diff_cols, justify = 'left')
             html += f'<div>Here are the {len(added_df.index)} new players who have been added to the list this week:</div><div>{table}</div>{new_line * 2}'
-        if len(dropped_df.index) > 0:
-            dropped_df['division'] = dropped_df['division'].apply(lambda x: x if x in ['1', '2', '3'] else '') # don't print NAIA conferences
-            table = dropped_df.to_html(index = False, columns = diff_cols, justify = 'left')
-            html += f'<div>These {len(dropped_df.index)} guys were dropped from the list because they were on the schools\' {now.year - 1} rosters but NOT on the updated {now.year} roster:</div><div>{table}</div>{new_line * 2}'
         html = html.replace('<table ', '<table style="border-collapsed: collapsed;" ') # TODO: get table border to look better... this doesn't seem to work
     else:
         html += f'<div>No new players were found by the scraper this week.</div>{new_line}'

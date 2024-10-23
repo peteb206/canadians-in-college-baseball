@@ -11,6 +11,8 @@ pd.set_option('display.max_columns', None) # show all cols
 pd.set_option('display.max_colwidth', None) # show full width of showing cols
 pd.set_option('display.expand_frame_repr', False) # print cols side by side as it's supposed to be
 
+today_str = datetime.now().strftime("%Y-%m-%d")
+
 def schools():
     # Fetch existing schools to dataframe
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -52,7 +54,10 @@ def schools():
         html = cbn_utils.get(f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams').text
         soup = BeautifulSoup(html, 'html.parser')
         schools = list()
-        for i, tr in enumerate(soup.find('table').find_all('tr')):
+        schools_table = soup.find('table')
+        if schools_table == None:
+            return pd.DataFrame()
+        for i, tr in enumerate(schools_table.find_all('tr')):
             if i > 0: # skip header row
                 td = tr.find_all('td')[1]
                 a = td.find('a')
@@ -62,7 +67,7 @@ def schools():
                     'id': name.lower().replace(' ', '') if len(url_split) == 0 else url_split[-1],
                     'name': name,
                     'league': league,
-                    'division': url_split[-3] if (league == 'NAIA') & (len(url_split) > 2) else ''
+                    'division': ''
                 })
         return compare_and_join(pd.DataFrame(schools))
 
@@ -114,45 +119,23 @@ def schools():
 
     # Compare existing and new data
     existing_df = google_sheets.df(schools_worksheet)[schools_df.columns]
-    existing_df['row_number'] = existing_df.index.to_series() + 2
     compare_df = pd.merge(existing_df, schools_df, how = 'outer', indicator = 'source')
 
     # Drop rows not found in new data
-    rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'].reset_index(drop = True)
-    number_of_rows_to_delete = len(rows_to_delete_df.index)
-    if number_of_rows_to_delete > 0:
-        schools_worksheet.freeze(rows = 0, cols = 0) # Un-freeze header and columns
-        cbn_utils.log(f'Deleting the following {number_of_rows_to_delete} rows:')
-        rows_to_delete_df = rows_to_delete_df.astype({'row_number': int}).drop('source', axis = 1).sort_values(by = 'row_number', ascending = False)
-        print(rows_to_delete_df)
-        time.sleep(len(rows_to_delete_df.index))
-        rows_to_delete_df['row_number'].apply(lambda row_number: schools_worksheet.delete_rows(row_number))
+    rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
+    print('\nSchools to Delete:')
+    print(rows_to_delete_df.to_string())
 
     # Add rows not found in existing data
     rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    number_of_rows_to_add = len(rows_to_add_df.index)
-    if number_of_rows_to_add > 0:
-        cbn_utils.log(f'Adding the following {number_of_rows_to_add} rows:')
-        print(rows_to_add_df)
-        time.sleep(1)
-        schools_worksheet.append_rows(rows_to_add_df[schools_df.columns].values.tolist())
-    google_sheets.set_sheet_header(schools_worksheet, sort_by = ['roster_url', 'id'])
-
-    # Email results to self
-    html = '<div>No changes to the schools list</div>'
-    if len(rows_to_add_df.index) > 0:
-        table = rows_to_add_df.to_html(index = False, justify = 'left')
-        html = f'<div>New schools ({len(rows_to_add_df.index)})</div><div>{table}</div>{"<div><br></div>" * 2}'
-    if len(rows_to_delete_df.index) > 0:
-        table = rows_to_delete_df.to_html(columns = schools_df.columns, index = False, justify = 'left')
-        html += f'<div>Dropped schools ({len(rows_to_delete_df.index)})</div><div>{table}</div>{"<div><br></div>" * 2}'
-    cbn_utils.send_email(f'New Schools (Week of {datetime.now().strftime("%B %d, %Y")})', html)
+    print('\nnSchools to Add:')
+    print(rows_to_add_df.to_string())
 
 def reset_roster_scrape_results():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
     schools_df = google_sheets.df(schools_worksheet)
     schools_count = len(schools_df.index)
-    schools_worksheet.update(f'H2:J{schools_count + 1}', [['' for _ in range(3)] for _ in range(schools_count)])
+    schools_worksheet.update(f'I2:K{schools_count + 1}', [['' for _ in range(3)] for _ in range(schools_count)])
 
 def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -164,14 +147,14 @@ def players():
     corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
     corrections = dict(zip(corrections_df['From'], corrections_df['To']))
 
-    added_rows_df = pd.DataFrame(columns = cols)
-    deleted_rows_df = added_rows_df.copy()
-
     # Iterate schools' roster pages
     roster_url = ''
     for i, school_series in schools_df.iterrows():
-        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (school_series['notes'] != ''):
-            continue # Skip schools that have no parseable roster site or have already been scraped
+        school_last_roster_check = school_series['last_roster_check']
+        days_since_last_check = (datetime.today() - datetime.strptime(school_last_roster_check, "%Y-%m-%d")).days if school_last_roster_check != '' else 99
+        # if i != 511: # test a specific school (i should be 2 less than the row number in the google sheet)
+        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 0):
+            continue # Skip schools that have no parseable roster site or have already been scraped recently
 
         school, roster_url = None, school_series['roster_url']
         try:
@@ -196,6 +179,8 @@ def players():
         canadians = [player for player in players if player.canadian]
         if (school.roster_page.redirected() == False) & (len(players) > 0):
             # Successful
+            school_last_roster_check = today_str
+
             # Get existing values
             time.sleep(0.3)
             players_df = google_sheets.df(players_worksheet)
@@ -222,27 +207,35 @@ def players():
 
             # Compare and add/delete rows as needed
             compare_df = existing_school_canadians_df.merge(school_canadians_df, how = 'outer', indicator = 'source')
-            # Only delete if removed from roster and no stats accumulated
-            rows_to_delete_df = compare_df[(compare_df['source'] == 'left_only') & (compare_df['G'] + compare_df['APP'] == 0)].copy()
-            time.sleep(len(rows_to_delete_df.index))
-            rows_to_delete_df['row'].apply(lambda x: players_worksheet.delete_rows(int(x)))
-            deleted_rows_df = pd.concat([deleted_rows_df, rows_to_delete_df[cols]], ignore_index = True)
             rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][cols]
+            rows_to_add_df['added'] = today_str
             if len(rows_to_add_df.index):
                 time.sleep(1)
                 players_worksheet.append_rows(rows_to_add_df.values.tolist())
-            added_rows_df = pd.concat([added_rows_df, rows_to_add_df], ignore_index = True)
+            confirmed_rows_indices = compare_df[compare_df['source'] == 'both']['row'].to_list()
+            for confirmed_row_index in confirmed_rows_indices:
+                time.sleep(0.3)
+                players_worksheet.update(f'K{confirmed_row_index}', today_str)
 
         # Update Schools sheet row
-        schools_worksheet.update(f'H{i + 2}:J{i + 2}', [[len(players), len(canadians), school.roster_page.result()]])
+        schools_worksheet.update(f'H{i + 2}:K{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]])
 
     google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
+def email_additions():
     # Email results to self
+    schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
+    schools_df = google_sheets.df(schools_worksheet)
     schools_df.rename({'name': 'school'}, axis = 1, inplace = True)
-    added_rows_df = added_rows_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
-    deleted_rows_df = deleted_rows_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
-    email_html = cbn_utils.player_scrape_results_email_html(added_rows_df, deleted_rows_df)
+
+    added_players_df = pd.DataFrame()
+    for sheet_name in ['Players (Manual)', 'Players']:
+        players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
+        players_df = google_sheets.df(players_worksheet)
+        players_df = players_df[players_df['added'].apply(lambda x: (datetime.today() - datetime.strptime(x, "%Y-%m-%d")).days) < 7] # Players added this week
+        added_players_df = pd.concat([added_players_df, players_df], ignore_index = True)
+    added_players_df = added_players_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
+    email_html = cbn_utils.player_scrape_results_email_html(added_players_df)
     cbn_utils.send_email(f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html)
 
 def stats():
@@ -307,6 +300,20 @@ def positions():
                         [player_games_by_position_df.loc[f'{player_row["first_name"]} {player_row["last_name"]}', ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH']].values.tolist()]
                     )
                     time.sleep(1)
+
+def minors():
+    bbref_base_url = 'https://www.baseball-reference.com'
+    bbref_canadians_req = cbn_utils.get(f'{bbref_base_url}/bio/Canada_born.shtml')
+    soup = BeautifulSoup(bbref_canadians_req.text, 'html.parser')
+    player_links = list(soup.find_all('a'))
+    print(len(player_links), "player links found")
+    for player_link in player_links:
+        if ('/players/' not in player_link['href']) | (not player_link['href'].endswith('.shtml')):
+            continue
+        bbref_player_req = cbn_utils.get(f'{bbref_base_url}{player_link["href"]}')
+        df = pd.read_html(bbref_player_req.text)
+        print(df)
+        time.sleep(10)
 
 # if __name__ == '__main__':
 #     schools()

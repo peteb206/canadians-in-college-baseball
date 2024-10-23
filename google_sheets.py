@@ -10,7 +10,7 @@ import pandas as pd
 class GoogleSpreadsheet:
     def __init__(self):
         # get API key
-        self.__set_api_key__('canadians-in-college-baseball-32cfc8392a02.json')
+        self.__set_api_key__('canadians-in-college-baseball-c74c89028d45.json')
 
         # authorize the clientsheet
         self.__client__: gspread.Client = gspread.authorize(
