@@ -126,6 +126,11 @@ class RosterPage(WebPage):
         players_list = roster_json['players']
         self.__players__ = []
         for player_dict in players_list:
+            throws = ''
+            if 'RHP' in (player_dict['positionShort' if from_api else 'position_short']).upper():
+                throws = 'R'
+            elif 'LHP' in (player_dict['positionShort' if from_api else 'position_short']).upper():
+                throws = 'L'
             is_canadian = cbn_utils.is_canadian(player_dict['hometown'])
             city, province = '', ''
             if is_canadian:
@@ -135,6 +140,7 @@ class RosterPage(WebPage):
                 first_name = player_dict['firstName' if from_api else 'first_name'],
                 positions = self.format_player_position(player_dict['positionShort' if from_api else 'position_short']),
                 year = self.format_player_class(player_dict['academicYearShort' if from_api else 'academic_year_short'].lower()),
+                throws = throws,
                 city = city,
                 province = province,
                 canadian = is_canadian
@@ -149,6 +155,7 @@ class RosterPage(WebPage):
             first_name = ''
             positions = set()
             year = ''
+            throws = ''
             city = ''
             province = ''
             is_canadian = False
@@ -164,6 +171,10 @@ class RosterPage(WebPage):
                     # Position
                     if i == 0:
                         positions = self.format_player_position(span.text)
+                        if 'RHP' in span.text.upper():
+                            throws = 'R'
+                        elif 'LHP' in span.text.upper():
+                            throws = 'L'
                     # Class
                     elif i == 1:
                         year = self.format_player_class(span.text.lower())
@@ -180,6 +191,7 @@ class RosterPage(WebPage):
                 first_name = first_name,
                 positions = positions,
                 year = year,
+                throws = throws,
                 city = city,
                 province = province,
                 canadian = is_canadian
@@ -194,6 +206,7 @@ class RosterPage(WebPage):
             first_name = ''
             positions = set()
             year = ''
+            throws = ''
             city = ''
             province = ''
             is_canadian = False
@@ -218,6 +231,10 @@ class RosterPage(WebPage):
                 position_span = position_div.find('span')
                 if position_span:
                     positions = self.format_player_position(position_span.text)
+                    if 'RHP' in position_span.text.upper():
+                        throws = 'R'
+                    elif 'LHP' in position_span.text.upper():
+                        throws = 'L'
             # Year
             year_span = person_div.find('span', {'class': 'sidearm-roster-player-academic-year'})
             if year_span:
@@ -241,6 +258,7 @@ class RosterPage(WebPage):
                 first_name = first_name,
                 positions = positions,
                 year = year,
+                throws = throws,
                 city = city,
                 province = province,
                 canadian = is_canadian
@@ -316,11 +334,15 @@ class RosterPage(WebPage):
                     # Set positions column
                     elif key.startswith('po'):
                         positions = self.format_player_position(value_str.upper())
+                        if 'RHP' in value_str.upper():
+                            throws = 'R'
+                        elif 'LHP' in value_str.upper():
+                            throws = 'L'
 
                     # Set throws column
-                    elif (key.startswith('b')) & (not key.startswith('bi')) & ('t' in key):
+                    elif (throws == '') & (key.startswith('b')) & (not key.startswith('bi')) & ('t' in key):
                         throws = self.format_player_handedness(value_str[-1])
-                    elif (key == 't') | key.startswith('throw') | key.startswith('t/'):
+                    elif (throws == '') & ((key == 't') | key.startswith('throw') | key.startswith('t/')):
                         throws = self.format_player_handedness(value_str[0])
 
                     # Set hometown column
