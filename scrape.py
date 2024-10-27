@@ -182,7 +182,6 @@ def players():
             school_last_roster_check = today_str
 
             # Get existing values
-            time.sleep(0.3)
             players_df = google_sheets.df(players_worksheet)
             existing_school_canadians_df: pd.DataFrame = players_df[players_df['school'] == school_series['stats_url']].copy()
             existing_school_canadians_df['row'] = existing_school_canadians_df.index.to_series() + 2
@@ -214,11 +213,12 @@ def players():
                 players_worksheet.append_rows(rows_to_add_df.values.tolist())
             confirmed_rows_indices = compare_df[compare_df['source'] == 'both']['row'].to_list()
             for confirmed_row_index in confirmed_rows_indices:
-                time.sleep(0.3)
+                time.sleep(0.5)
                 players_worksheet.update(f'K{int(confirmed_row_index)}', today_str)
 
         # Update Schools sheet row
         schools_worksheet.update(f'H{i + 2}:K{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]])
+        time.sleep(0.5)
 
     google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
