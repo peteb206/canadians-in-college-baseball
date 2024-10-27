@@ -215,7 +215,7 @@ def players():
             confirmed_rows_indices = compare_df[compare_df['source'] == 'both']['row'].to_list()
             for confirmed_row_index in confirmed_rows_indices:
                 time.sleep(0.3)
-                players_worksheet.update(f'K{confirmed_row_index}', today_str)
+                players_worksheet.update(f'K{int(confirmed_row_index)}', today_str)
 
         # Update Schools sheet row
         schools_worksheet.update(f'H{i + 2}:K{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]])

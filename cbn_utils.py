@@ -254,7 +254,8 @@ ignore_strings = [
     'new brunswick,',
     'bca',
     'seoul, sk',
-    'alkmaar, nl'
+    'alkmaar, nl',
+    'bc post grad'
 ]
 
 def is_canadian(string: str) -> bool:
