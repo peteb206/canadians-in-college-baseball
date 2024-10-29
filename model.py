@@ -170,7 +170,7 @@ class RosterPage(WebPage):
                 for i, span in enumerate(details_div.find_all('span', {'class': 's-person-details__bio-stats-item'})):
                     # Position
                     if i == 0:
-                        positions = self.format_player_position(span.text)
+                        positions = self.format_player_position(span.text.upper().replace('POSITION', ''))
                         if 'RHP' in span.text.upper():
                             throws = 'R'
                         elif 'LHP' in span.text.upper():
