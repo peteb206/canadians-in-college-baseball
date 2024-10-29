@@ -123,13 +123,14 @@ def schools():
 
     # Drop rows not found in new data
     rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
-    print('\nSchools to Delete:')
+    print('\n\nSchools to Delete:')
     print(rows_to_delete_df.to_string())
 
     # Add rows not found in existing data
     rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    print('\nnSchools to Add:')
+    print('\n\nSchools to Add:')
     print(rows_to_add_df.to_string())
+    print('')
 
 def reset_roster_scrape_results():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -153,7 +154,7 @@ def players():
         school_last_roster_check = school_series['last_roster_check']
         days_since_last_check = (datetime.today() - datetime.strptime(school_last_roster_check, "%Y-%m-%d")).days if school_last_roster_check != '' else 99
         # if i != 511: # test a specific school (i should be 2 less than the row number in the google sheet)
-        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 0):
+        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 1):
             continue # Skip schools that have no parseable roster site or have already been scraped recently
 
         school, roster_url = None, school_series['roster_url']
