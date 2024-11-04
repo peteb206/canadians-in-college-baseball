@@ -209,16 +209,13 @@ def players():
             rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][cols]
             rows_to_add_df['added'] = today_str
             if len(rows_to_add_df.index):
-                time.sleep(1)
-                players_worksheet.append_rows(rows_to_add_df.values.tolist())
+                cbn_utils.pause(players_worksheet.append_rows(rows_to_add_df.values.tolist()))
             confirmed_rows_indices = compare_df[compare_df['source'] == 'both']['row'].to_list()
             for confirmed_row_index in confirmed_rows_indices:
-                time.sleep(0.5)
-                players_worksheet.update(f'K{int(confirmed_row_index)}', today_str)
+                cbn_utils.pause(players_worksheet.update(f'K{int(confirmed_row_index)}', today_str))
 
         # Update Schools sheet row
-        schools_worksheet.update(f'H{i + 2}:K{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]])
-        time.sleep(0.5)
+        cbn_utils.pause(schools_worksheet.update(f'H{i + 2}:K{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]]))
 
     google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
@@ -259,10 +256,9 @@ def stats():
                     if player.id != '':
                         # Update player stats
                         stat_values = list(player.to_dict().values())[14:]
-                        players_worksheet.update(f'J{i + 2}:AH{i + 2}', [[player.id] + stat_values])
+                        cbn_utils.pause(players_worksheet.update(f'J{i + 2}:AH{i + 2}', [[player.id] + stat_values]))
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {stats_url} - {str(e)}')
-            time.sleep(1)
 
 def positions():
     # Manual corrections
@@ -295,11 +291,12 @@ def positions():
             player_games_by_position_df = positions_df2.pivot(index = 'player', columns = 'positions', values = 'url').fillna(0).astype(int)
             for i, player_row in players_df[players_df['school'] == stats_url].iterrows():
                 if f'{player_row["first_name"]} {player_row["last_name"]}' in player_games_by_position_df.index:
-                    players_worksheet.update(
-                        f'AI{i + 2}:AO{i + 2}',
-                        [player_games_by_position_df.loc[f'{player_row["first_name"]} {player_row["last_name"]}', ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH']].values.tolist()]
+                    cbn_utils.pause(
+                        players_worksheet.update(
+                            f'AI{i + 2}:AO{i + 2}',
+                            [player_games_by_position_df.loc[f'{player_row["first_name"]} {player_row["last_name"]}', ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH']].values.tolist()]
+                        )
                     )
-                    time.sleep(1)
 
 def minors():
     year = datetime.now().year
