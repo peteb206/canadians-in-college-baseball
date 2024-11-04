@@ -3,6 +3,7 @@ import requests
 import os
 import pandas as pd
 from datetime import datetime
+import time
 import smtplib
 from email.mime.text import MIMEText
 import ssl
