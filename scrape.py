@@ -39,10 +39,12 @@ def schools():
         df['state'] = df['memberOrgAddress'].apply(lambda x: x['state'])
         return compare_and_join(df.sort_values(by = ['division', 'name'], ignore_index = True))
 
-    def get_other_schools(league: str) -> pd.DataFrame:
+    def get_other_schools(league: str, division: int = 0) -> pd.DataFrame:
         domain = ''
         if league == 'NAIA':
             domain = cbn_utils.NAIA_DOMAIN
+        elif league == 'JUCO':
+            domain = cbn_utils.JUCO_DOMAIN
         elif league == 'CCCAA':
             domain = cbn_utils.CCCAA_DOMAIN
         elif league == 'NWAC':
@@ -51,7 +53,10 @@ def schools():
             domain = cbn_utils.USCAA_DOMAIN
         else:
             return pd.DataFrame()
-        html = cbn_utils.get(f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams').text
+        url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/div{division}/teams'
+        if division not in [1, 2, 3]:
+            url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams'
+        html = cbn_utils.get(url).text
         soup = BeautifulSoup(html, 'html.parser')
         schools = list()
         schools_table = soup.find('table')
@@ -67,7 +72,7 @@ def schools():
                     'id': name.lower().replace(' ', '') if len(url_split) == 0 else url_split[-1],
                     'name': name,
                     'league': league,
-                    'division': ''
+                    'division': str(division) if division in [1, 2, 3] else ''
                 })
         return compare_and_join(pd.DataFrame(schools))
 
@@ -75,21 +80,15 @@ def schools():
         return get_other_schools('NAIA')
 
     def get_juco_schools() -> pd.DataFrame:
-        domain = cbn_utils.JUCO_DOMAIN
-        html = cbn_utils.get(f'https://{domain}/sports/bsb/teams').text
-        soup = BeautifulSoup(html, 'html.parser')
-        schools, league, division = list(), 'JUCO', 0
-        for div in soup.find_all('div', {'class': 'content-col'}):
-            division += 1
-            for a in div.find_all('a', {'class': 'college-name'}):
-                school_id = a['href'].split('/')[-1]
-                schools.append({
-                    'id': school_id,
-                    'name': a.text,
-                    'league': league,
-                    'division': str(division)
-                })
-        return compare_and_join(pd.DataFrame(schools))
+        schools_df = pd.concat(
+            [
+                get_other_schools('JUCO', division = 1),
+                get_other_schools('JUCO', division = 2),
+                get_other_schools('JUCO', division = 3)
+            ],
+            ignore_index = True
+        )
+        return schools_df
 
     def get_cccaa_schools() -> pd.DataFrame:
         return get_other_schools('CCCAA')
@@ -233,7 +232,7 @@ def email_additions():
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
-        players_df = players_df[players_df['added'].apply(lambda x: (datetime.today() - datetime.strptime(x, "%Y-%m-%d")).days) < 6] # Players added this week
+        players_df = players_df[players_df['added'].apply(lambda x: (datetime.today() - datetime.strptime(x, "%Y-%m-%d")).days) < 4] # Players added this week
         added_players_df = pd.concat([added_players_df, players_df], ignore_index = True)
     added_players_df = added_players_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
     email_html = cbn_utils.player_scrape_results_email_html(added_players_df)
@@ -303,6 +302,7 @@ def positions():
                     time.sleep(1)
 
 def minors():
+    year = datetime.now().year
     bbref_base_url = 'https://www.baseball-reference.com'
     bbref_canadians_req = cbn_utils.get(f'{bbref_base_url}/bio/Canada_born.shtml')
     soup = BeautifulSoup(bbref_canadians_req.text, 'html.parser')
@@ -312,9 +312,17 @@ def minors():
         if ('/players/' not in player_link['href']) | (not player_link['href'].endswith('.shtml')):
             continue
         bbref_player_req = cbn_utils.get(f'{bbref_base_url}{player_link["href"]}')
-        df = pd.read_html(bbref_player_req.text)
-        print(df)
-        time.sleep(10)
+        dfs = pd.read_html(bbref_player_req.text)
+        for df in dfs:
+            if ('OPS' not in df.columns) | ('SV' not in df.columns):
+                # Not a relevant table
+                continue
+            year_df = df[df['Year'].str.contains(str(year))]
+            if len(year_df.index) == 0:
+                # No stats this year
+                continue
+            print(df)
+        time.sleep(2)
 
 # if __name__ == '__main__':
 #     schools()
@@ -329,4 +337,4 @@ def minors():
 
 #     stats()
 
-#     positions()
+#     minors()
