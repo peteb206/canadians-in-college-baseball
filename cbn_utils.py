@@ -112,8 +112,8 @@ stats_labels = {
 }
 
 # Functions
-def pause(foo):
-    time.sleep(1)
+def pause(_):
+    time.sleep(0.7)
 
 def log(message: str):
     print(log_prefix(), message) if RUNNING_LOCALLY else print(message)
