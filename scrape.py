@@ -208,6 +208,7 @@ def players():
             compare_df = existing_school_canadians_df.merge(school_canadians_df, how = 'outer', indicator = 'source')
             rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][cols]
             rows_to_add_df['added'] = today_str
+            rows_to_add_df['last_confirmed_on_roster'] = today_str
             if len(rows_to_add_df.index):
                 cbn_utils.pause(players_worksheet.append_rows(rows_to_add_df.values.tolist()))
             confirmed_rows_indices = compare_df[compare_df['source'] == 'both']['row'].to_list()
