@@ -122,14 +122,16 @@ def schools():
 
     # Drop rows not found in new data
     rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
-    print('\n\nSchools to Delete:')
-    print(rows_to_delete_df.to_string())
+    print(f'\n\n{len(rows_to_delete_df.index)} Schools to Delete:')
+    if len(rows_to_delete_df.index) > 0:
+        print(rows_to_delete_df.to_string())
 
     # Add rows not found in existing data
     rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    print('\n\nSchools to Add:')
-    print(rows_to_add_df.to_string())
-    print('')
+    print(f'\n\n{len(rows_to_add_df.index)} Schools to Add:')
+    if len(rows_to_add_df.index) > 0:
+        print(rows_to_add_df.to_string())
+        print('')
 
 def reset_roster_scrape_results():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
