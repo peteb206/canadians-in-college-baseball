@@ -113,7 +113,7 @@ stats_labels = {
 
 # Functions
 def pause(_):
-    time.sleep(0.7)
+    time.sleep(0.8)
 
 def log(message: str):
     print(log_prefix(), message) if RUNNING_LOCALLY else print(message)
