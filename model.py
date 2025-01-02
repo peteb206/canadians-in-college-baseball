@@ -351,7 +351,7 @@ class RosterPage(WebPage):
                         is_canadian = cbn_utils.is_canadian(value_str)
                         if is_canadian:
                             city, province = self.format_player_hometown(value_str)
-                    elif not is_canadian: # elif ('home' in key) | ('province' in key):
+                    elif (not is_canadian) & (key != 'connect'): # elif ('home' in key) | ('province' in key):
                         is_canadian = cbn_utils.is_canadian(value_str)
                         if is_canadian:
                             city, province = self.format_player_hometown(value_str)
