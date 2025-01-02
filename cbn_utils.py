@@ -174,8 +174,12 @@ def player_scrape_results_email_html(added_df: pd.DataFrame) -> str:
     html += f'<div>Thanks,</div><div>Pete</div></div>'
     return html
 
-def send_email(subject: str, html: str):
+def send_email(to: str, subject: str, html: str):
     # Ensure password is found
+    if os.environ.get('MY_GMAIL') == None:
+        os.environ['MY_GMAIL'] = env('MY_GMAIL')
+    if os.environ.get('BOB_GMAIL') == None:
+        os.environ['BOB_GMAIL'] = env('BOB_GMAIL')
     if os.environ.get('GMAIL_PASSWORD') == None:
         os.environ['GMAIL_PASSWORD'] = env('GMAIL_PASSWORD')
     if os.environ.get('GMAIL_PASSWORD') == None:
@@ -185,9 +189,12 @@ def send_email(subject: str, html: str):
     # Send
     msg = MIMEText(html, 'html')
     msg['Subject'] = subject
-    my_gmail = 'peteb206@gmail.com'
+    my_gmail = os.environ.get('MY_GMAIL')
     msg['From'] = f'CBN Scrape Results <{my_gmail}>'
-    msg['To'] = my_gmail
+    if to == 'bob':
+        msg['To'] = os.environ.get('BOB_GMAIL')
+    else:
+        msg['To'] = my_gmail
     smtp_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
     smtp_server.login(my_gmail, os.environ.get('GMAIL_PASSWORD'))
     smtp_server.sendmail(my_gmail, my_gmail, msg.as_string())

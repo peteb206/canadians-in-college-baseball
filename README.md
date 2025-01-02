@@ -16,7 +16,6 @@ Python web scraper for the Canadian Baseball Network... [view full project descr
 - Export results to Google Sheets and display using gspread package.
 
 ## Python (3.11.2) Packages
-[![unit-tests](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/peteb206/canadians-in-college-baseball/actions/workflows/unit-tests.yml)
 ### Web Scraping
 - requests (2.28.1)
 - beautifulsoup4 (4.11.1)

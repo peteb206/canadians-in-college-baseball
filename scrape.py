@@ -122,22 +122,16 @@ def schools():
 
     # Drop rows not found in new data
     rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
-    print(f'\n\n{len(rows_to_delete_df.index)} Schools to Delete:')
+    print(f'\n{len(rows_to_delete_df.index)} Schools to Delete:')
     if len(rows_to_delete_df.index) > 0:
         print(rows_to_delete_df.to_string())
 
     # Add rows not found in existing data
     rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    print(f'\n\n{len(rows_to_add_df.index)} Schools to Add:')
+    print(f'\n{len(rows_to_add_df.index)} Schools to Add:')
     if len(rows_to_add_df.index) > 0:
         print(rows_to_add_df.to_string())
-        print('')
-
-def reset_roster_scrape_results():
-    schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
-    schools_df = google_sheets.df(schools_worksheet)
-    schools_count = len(schools_df.index)
-    schools_worksheet.update(f'I2:K{schools_count + 1}', [['' for _ in range(3)] for _ in range(schools_count)])
+    print('')
 
 def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -222,7 +216,7 @@ def players():
 
     google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
-def email_additions():
+def email_additions(to: str):
     # Email results to self
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
     schools_df = google_sheets.df(schools_worksheet)
@@ -236,7 +230,7 @@ def email_additions():
         added_players_df = pd.concat([added_players_df, players_df], ignore_index = True)
     added_players_df = added_players_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
     email_html = cbn_utils.player_scrape_results_email_html(added_players_df)
-    cbn_utils.send_email(f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html)
+    cbn_utils.send_email(to, f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html)
 
 def stats():
     # Manual corrections
@@ -326,15 +320,6 @@ def minors():
 
 # if __name__ == '__main__':
 #     schools()
-
-#     options = ['y', 'n']
-#     selection = ''
-#     while selection not in options:
-#         selection = input(f'Reset player scrape results for each school? {"/".join(options)} ')
-#     if selection == options[0]:
-#         reset_roster_scrape_results()
 #     players()
-
 #     stats()
-
 #     minors()
