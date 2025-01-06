@@ -38,7 +38,7 @@ class WebPage:
         elif self.success():
             status += f' {self.__SUCCESS_ICON__}'
         else:
-            status += f' {self.__ERROR_ICON__}'
+            status += f' {self.__ERROR_ICON__} {self.__response__.reason} ({self.__response__.status_code})'
         return status
 
     def url(self) -> str:
