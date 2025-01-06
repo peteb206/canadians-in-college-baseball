@@ -190,7 +190,7 @@ def send_email(to: str, subject: str, html: str):
     msg = MIMEText(html, 'html')
     msg['Subject'] = subject
     my_gmail = os.environ.get('MY_GMAIL')
-    msg['From'] = f'CBN Scrape Results <{my_gmail}>'
+    msg['From'] = my_gmail
     if to == 'bob':
         msg['To'] = os.environ.get('BOB_GMAIL')
     else:
