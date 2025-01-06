@@ -25,4 +25,4 @@ jobs:
                BOB_GMAIL: ${{ secrets.BOB_GMAIL }}
                GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
             run: |
-               python -c 'import google_sheets; google_sheets.update_canadians_sheet(); scrape.email_additions("bob");'
+               python -c 'import google_sheets; import scrape; google_sheets.update_canadians_sheet(); scrape.email_additions("bob");'
