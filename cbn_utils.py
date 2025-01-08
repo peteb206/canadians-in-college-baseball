@@ -1,6 +1,7 @@
 import re
 import requests
 import os
+import platform
 import pandas as pd
 from datetime import datetime
 import time
@@ -20,8 +21,11 @@ def env(key: str):
                 if key_value_tuple[0] == key:
                     return key_value_tuple[1]
 
+print(f'platform.system() --> "{platform.system()}"')
 RUNNING_LOCALLY = env('LOCAL') == '1'
 now = datetime.now()
+
+print(platform.system())
 
 # Requests
 session = requests.Session()
@@ -113,7 +117,7 @@ stats_labels = {
 
 # Functions
 def pause(_):
-    time.sleep(0.8)
+    time.sleep(1)
 
 def log(message: str):
     print(log_prefix(), message) if RUNNING_LOCALLY else print(message)
