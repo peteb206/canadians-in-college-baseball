@@ -26,8 +26,5 @@ jobs:
          -  name: scrape players
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
-               MY_GMAIL: ${{ secrets.MY_GMAIL }}
-               BOB_GMAIL: ${{ secrets.BOB_GMAIL }}
-               GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
             run: |
                python -c 'import scrape; scrape.schools(); scrape.players(); scrape.email_additions("pete");'

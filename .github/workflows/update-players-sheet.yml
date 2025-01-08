@@ -21,8 +21,5 @@ jobs:
          -  name: update players sheet
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
-               MY_GMAIL: ${{ secrets.MY_GMAIL }}
-               BOB_GMAIL: ${{ secrets.BOB_GMAIL }}
-               GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
             run: |
                python -c 'import google_sheets; import scrape; google_sheets.update_canadians_sheet(); scrape.email_additions("bob");'

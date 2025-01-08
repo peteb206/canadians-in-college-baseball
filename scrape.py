@@ -231,7 +231,7 @@ def email_additions(to: str):
     added_players_df = added_players_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
     added_players_df.drop_duplicates(subset = ['roster_url', 'last_name', 'first_name'], inplace = True) # keep first (highest league for a school)
     email_html = cbn_utils.player_scrape_results_email_html(added_players_df)
-    cbn_utils.send_email(to, f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html)
+    cbn_utils.send_email(to, f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html, google_sheets.config)
 
 def stats():
     # Manual corrections

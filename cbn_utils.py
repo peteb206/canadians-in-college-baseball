@@ -174,30 +174,17 @@ def player_scrape_results_email_html(added_df: pd.DataFrame) -> str:
     html += f'<div>Thanks,</div><div>Pete</div></div>'
     return html
 
-def send_email(to: str, subject: str, html: str):
-    # Ensure password is found
-    if os.environ.get('MY_GMAIL') == None:
-        os.environ['MY_GMAIL'] = env('MY_GMAIL')
-    if os.environ.get('BOB_GMAIL') == None:
-        os.environ['BOB_GMAIL'] = env('BOB_GMAIL')
-    if os.environ.get('GMAIL_PASSWORD') == None:
-        os.environ['GMAIL_PASSWORD'] = env('GMAIL_PASSWORD')
-    if os.environ.get('GMAIL_PASSWORD') == None:
-        log('No Gmail password found')
-        return
-
-    # Send
+def send_email(to: str, subject: str, html: str, config: dict):
     msg = MIMEText(html, 'html')
     msg['Subject'] = subject
-    my_gmail = os.environ.get('MY_GMAIL')
-    msg['From'] = my_gmail
+    msg['From'] = f'Pete Berryman <{config["MY_GMAIL"]}>'
     if to == 'bob':
-        msg['To'] = os.environ.get('BOB_GMAIL')
+        msg['To'] = f'Bob Elliott <{config["BOB_GMAIL"]}>'
     else:
-        msg['To'] = my_gmail
+        msg['To'] = msg['From']
     smtp_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-    smtp_server.login(my_gmail, os.environ.get('GMAIL_PASSWORD'))
-    smtp_server.sendmail(my_gmail, my_gmail, msg.as_string())
+    smtp_server.login(config['MY_GMAIL'], config['GMAIL_PASSWORD'])
+    smtp_server.sendmail(config['MY_GMAIL'], config['MY_GMAIL'], msg.as_string())
     smtp_server.quit()
 
 # Canada logic
