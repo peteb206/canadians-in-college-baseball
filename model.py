@@ -370,8 +370,10 @@ class RosterPage(WebPage):
     @staticmethod
     def format_player_class(string: str):
         # Output Freshman, Sophomore, Junior or Senior
-        grad_year_map = {"'23": "Senior", "'24": "Junior", "'25": "Sophomore", "'26": "Freshman"}
+        # TODO: don't want to have this hardcoded. See how many schools are doing this
+        grad_year_map = {"'25": "Senior", "'26": "Junior", "'27": "Sophomore", "'28": "Freshman"}
         if string in grad_year_map.keys():
+            print('CHECK!')
             return grad_year_map[string]
 
         if ('j' in string) | ('3' in string):

@@ -21,20 +21,17 @@ def env(key: str):
                 if key_value_tuple[0] == key:
                     return key_value_tuple[1]
 
-print(f'platform.system() --> "{platform.system()}"')
-RUNNING_LOCALLY = env('LOCAL') == '1'
-now = datetime.now()
-
-print(platform.system())
+RUNNING_LOCALLY = False if platform.system() == 'Linux' else True
 
 # Requests
 session = requests.Session()
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-    'X-Requested-With': 'XMLHttpRequest'
-}
 
 def get(url: str, headers: dict[str, str] = headers, timeout: int = 60, verify: bool = True, attempt: int = 0):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+        'X-Requested-With': 'XMLHttpRequest'
+    }
+
     def print_req_result(req: requests.Response):
         if not isinstance(req, requests.Response):
             print(f' - timed out after {timeout}s')
