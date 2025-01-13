@@ -26,7 +26,7 @@ RUNNING_LOCALLY = False if platform.system() == 'Linux' else True
 # Requests
 session = requests.Session()
 
-def get(url: str, headers: dict[str, str] = headers, timeout: int = 60, verify: bool = True, attempt: int = 0):
+def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
         'X-Requested-With': 'XMLHttpRequest'
@@ -49,14 +49,14 @@ def get(url: str, headers: dict[str, str] = headers, timeout: int = 60, verify: 
     except requests.exceptions.SSLError:
         print_req_result(req)
         if verify:
-            return get(url, headers = headers, timeout = timeout, verify = False)
+            return get(url, timeout = timeout, verify = False)
     except (
         requests.exceptions.ReadTimeout,
         requests.exceptions.ConnectTimeout
     ): # 1 retry on timeout
         print_req_result(req)
         if attempt == 0:
-            return get(url, headers = headers, timeout = timeout * 2, verify = verify, attempt = 1)
+            return get(url, timeout = timeout * 2, verify = verify, attempt = 1)
     except requests.exceptions.ConnectionError:
         print_req_result(req)
     return req
