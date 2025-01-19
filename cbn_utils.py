@@ -195,16 +195,16 @@ city_strings = {
 }
 
 province_strings = {
-    'Alberta': ['alberta', ', alta.', ', ab', 'a.b.'],
+    'Alberta': ['alberta', ', alta.', ', ab', 'a.b.', ',ab'],
     'British Columbia': ['british columbia', 'b.c', ' bc', ',bc'],
-    'Manitoba': ['manitoba', ', mb', ', man.'],
-    'New Brunswick': ['new brunswick', ', nb', 'n.b.'],
-    'Newfoundland & Labrador': ['newfoundland', 'nfld', ', nl'],
-    'Nova Scotia': ['nova scotia', ', ns', 'n.s.' ],
+    'Manitoba': ['manitoba', ', mb', ', man.', ',mb'],
+    'New Brunswick': ['new brunswick', ', nb', 'n.b.', ',nb'],
+    'Newfoundland & Labrador': ['newfoundland', 'nfld', ', nl', ',nl'],
+    'Nova Scotia': ['nova scotia', ', ns', 'n.s.', 'ns'],
     'Ontario': [', ontario', ', on', ',on', '(ont)', ', o.n.'],
     'Prince Edward Island': ['prince edward island', 'p.e.i.'],
-    'Quebec': ['quebec', 'q.c.', ', qu', ', que.', ', qb', ', qc'],
-    'Saskatchewan': ['saskatchewan', ', sask', ', sk', 's.k.']
+    'Quebec': ['quebec', 'q.c.', ', qu', ', que.', ', qb', ', qc', ',qu', ',qb', ',qc'],
+    'Saskatchewan': ['saskatchewan', ', sask', ', sk', 's.k.', ',sk']
 }
 
 country_strings = {

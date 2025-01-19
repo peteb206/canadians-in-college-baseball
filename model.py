@@ -471,6 +471,7 @@ class RosterPage(WebPage):
         if not formatted: # Province likely not listed, just get city
             city = string2.split(',')[0]
         city = re.sub(r'[^\w\-\s\.]', '', city).strip() # remove unwanted characters from city
+        city = city.replace('Hometown ', '')
         if city == city.upper(): # convert from all-caps to proper case, if necessary
             city = ' '.join([city_part[0].upper() + city_part[1:].lower() for city_part in city.split()])
 
