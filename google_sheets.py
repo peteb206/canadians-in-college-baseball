@@ -36,7 +36,7 @@ class GoogleSpreadsheet:
         cbn_utils.check_string_arg(name = 'name', value = name, disallowed_values = [''])
 
         spreadsheet = self.__client__.open(name)
-        log(f'Connected to {name} spreadsheet...')
+        cbn_utils.log(f'Connected to {name} spreadsheet...')
         return spreadsheet
 
 def df(worksheet: gspread.Worksheet) -> pd.DataFrame:
