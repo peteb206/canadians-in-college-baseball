@@ -122,16 +122,16 @@ def schools():
 
     # Drop rows not found in new data
     rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
-    print(f'\n{len(rows_to_delete_df.index)} Schools to Delete:')
+    log(f'\n{len(rows_to_delete_df.index)} Schools to Delete:')
     if len(rows_to_delete_df.index) > 0:
-        print(rows_to_delete_df.to_string())
+        log(rows_to_delete_df.to_string())
 
     # Add rows not found in existing data
     rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    print(f'\n{len(rows_to_add_df.index)} Schools to Add:')
+    log(f'\n{len(rows_to_add_df.index)} Schools to Add:')
     if len(rows_to_add_df.index) > 0:
-        print(rows_to_add_df.to_string())
-    print('')
+        log(rows_to_add_df.to_string())
+    log('')
 
 def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -302,7 +302,7 @@ def minors():
     bbref_canadians_req = cbn_utils.get(f'{bbref_base_url}/bio/Canada_born.shtml')
     soup = BeautifulSoup(bbref_canadians_req.text, 'html.parser')
     player_links = list(soup.find_all('a'))
-    print(len(player_links), "player links found")
+    log(len(player_links), "player links found")
     for player_link in player_links:
         if ('/players/' not in player_link['href']) | (not player_link['href'].endswith('.shtml')):
             continue
@@ -316,7 +316,7 @@ def minors():
             if len(year_df.index) == 0:
                 # No stats this year
                 continue
-            print(df)
+            log(df)
         time.sleep(2)
 
 # if __name__ == '__main__':

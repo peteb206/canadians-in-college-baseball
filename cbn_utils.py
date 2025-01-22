@@ -34,14 +34,14 @@ def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
 
     def print_req_result(req: requests.Response):
         if not isinstance(req, requests.Response):
-            print(f' - timed out after {timeout}s')
+            log(f' - timed out after {timeout}s')
         else:
-            print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
+            log(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
 
     if not verify:
         log(f'WARNING: sending unverified request to {url}')
 
-    print(log_prefix(), 'GET', url, end = '')
+    log(log_prefix(), 'GET', url, end = '')
     req = None
     try:
         req = session.get(url, headers = headers, timeout = timeout, verify = verify)
