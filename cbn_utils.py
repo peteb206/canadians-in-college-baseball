@@ -200,7 +200,7 @@ province_strings = {
     'Manitoba': ['manitoba', ', mb', ', man.', ',mb'],
     'New Brunswick': ['new brunswick', ', nb', 'n.b.', ',nb'],
     'Newfoundland & Labrador': ['newfoundland', 'nfld', ', nl', ',nl'],
-    'Nova Scotia': ['nova scotia', ', ns', 'n.s.', 'ns'],
+    'Nova Scotia': ['nova scotia', ', ns', 'n.s.', ',ns'],
     'Ontario': [', ontario', ', on', ',on', '(ont)', ', o.n.'],
     'Prince Edward Island': ['prince edward island', 'p.e.i.'],
     'Quebec': ['quebec', 'q.c.', ', qu', ', que.', ', qb', ', qc', ',qu', ',qb', ',qc'],
