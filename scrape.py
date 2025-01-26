@@ -302,7 +302,7 @@ def minors():
     bbref_canadians_req = cbn_utils.get(f'{bbref_base_url}/bio/Canada_born.shtml')
     soup = BeautifulSoup(bbref_canadians_req.text, 'html.parser')
     player_links = list(soup.find_all('a'))
-    cbn_utils.len(player_links), "player links found")
+    cbn_utils.log(f'{len(player_links)} player links found')
     for player_link in player_links:
         if ('/players/' not in player_link['href']) | (not player_link['href'].endswith('.shtml')):
             continue
@@ -316,7 +316,7 @@ def minors():
             if len(year_df.index) == 0:
                 # No stats this year
                 continue
-            cbn_utils.log(df)
+            cbn_utils.log(df.to_string())
         time.sleep(2)
 
 # if __name__ == '__main__':
