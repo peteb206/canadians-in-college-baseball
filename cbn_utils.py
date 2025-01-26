@@ -41,7 +41,7 @@ def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
     if not verify:
         log(f'WARNING: sending unverified request to {url}')
 
-    log(log_prefix(), 'GET', url, end = '')
+    print(log_prefix(), 'GET', url, end = '')
     req = None
     try:
         req = session.get(url, headers = headers, timeout = timeout, verify = verify)
