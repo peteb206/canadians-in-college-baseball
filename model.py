@@ -107,6 +107,14 @@ class RosterPage(WebPage):
             self.__parse_sidearm_json__(roster_json_match[1])
             return
         soup = BeautifulSoup(html, 'html.parser')
+        for script in soup.find_all('script'):
+            if re.search('window.__INITIAL_STATE__', script.text) != None:
+                # Parse roster JSON
+                json_string = script.text.replace("window.__INITIAL_STATE__=\'", '')[:-2]
+                json_string = json_string[(json_string.find(',"players":') + 11):(json_string.find('"coaches":') - 1)]
+                json_string = json_string.replace('\\', '').replace("'", '')
+                self.__parse_sidearm_json__(json_string, from_api = True)
+                return
         cards = soup.find_all('div', {'class': 's-person-card'})
         if len(cards) > 0:
             # Parse sidearm cards
@@ -123,7 +131,11 @@ class RosterPage(WebPage):
     def __parse_sidearm_json__(self, json_string: str, from_api: bool = False):
         self.__result__ += ' Parsed sidearm (roster JSON)'
         roster_json = json.loads(json_string)
-        players_list = roster_json['players']
+        players_list = list()
+        if isinstance(roster_json, list):
+            players_list = roster_json
+        else:
+            players_list = roster_json['players']
         self.__players__ = []
         for player_dict in players_list:
             throws = ''
