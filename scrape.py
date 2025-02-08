@@ -122,13 +122,15 @@ def schools():
 
     # Drop rows not found in new data
     rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
-    cbn_utils.log(f'\n{len(rows_to_delete_df.index)} Schools to Delete:')
+    cbn_utils.log('')
+    cbn_utils.log(f'{len(rows_to_delete_df.index)} Schools to Delete:')
     if len(rows_to_delete_df.index) > 0:
         cbn_utils.log(rows_to_delete_df.to_string())
 
     # Add rows not found in existing data
     rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    cbn_utils.log(f'\n{len(rows_to_add_df.index)} Schools to Add:')
+    cbn_utils.log('')
+    cbn_utils.log(f'{len(rows_to_add_df.index)} Schools to Add:')
     if len(rows_to_add_df.index) > 0:
         cbn_utils.log(rows_to_add_df.to_string())
     cbn_utils.log('')
@@ -148,8 +150,8 @@ def players():
     for i, school_series in schools_df.iterrows():
         school_last_roster_check = school_series['last_roster_check']
         days_since_last_check = (datetime.today() - datetime.strptime(school_last_roster_check, "%Y-%m-%d")).days if school_last_roster_check != '' else 99
-        # if i != 511: # test a specific school (i should be 2 less than the row number in the google sheet)
-        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 1):
+        if i not in [55, 56]: # test a specific school (i should be 2 less than the row number in the google sheet)
+        # if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 1):
             continue # Skip schools that have no parseable roster site or have already been scraped recently
 
         school, roster_url = None, school_series['roster_url']
@@ -179,7 +181,7 @@ def players():
 
             # Get existing values
             players_df = google_sheets.df(players_worksheet)
-            existing_school_canadians_df: pd.DataFrame = players_df[players_df['school'] == school_series['stats_url']].copy()
+            existing_school_canadians_df: pd.DataFrame = players_df[players_df['school_roster_url'] == school_series['roster_url']].copy()
             existing_school_canadians_df['row'] = existing_school_canadians_df.index.to_series() + 2
             existing_school_canadians_df['positions'] = existing_school_canadians_df['positions'].str.upper() # INF is converted to inf
 
@@ -190,9 +192,9 @@ def players():
             scraped_school_canadians_df['school_roster_url'] = roster_url
             scraped_school_canadians_df['positions'] = scraped_school_canadians_df['positions'].apply(lambda x: '/'.join(x)) # Convert list to "/" delimited string
             school_canadians_df = scraped_school_canadians_df.merge(
-                existing_school_canadians_df[['school', 'last_name', 'first_name', 'positions', 'year', 'throws', 'city', 'province']],
+                existing_school_canadians_df[['last_name', 'first_name', 'positions', 'year', 'throws', 'city', 'province', 'school_roster_url']],
                 how = 'left',
-                on = ['school', 'last_name', 'first_name'],
+                on = ['school_roster_url', 'last_name', 'first_name'],
                 suffixes = ['_fetched', '']
             )
             school_canadians_df.fillna('', inplace = True)
@@ -209,10 +211,10 @@ def players():
                 cbn_utils.pause(players_worksheet.append_rows(rows_to_add_df.values.tolist()))
             confirmed_rows_indices = compare_df[compare_df['source'] == 'both']['row'].to_list()
             for confirmed_row_index in confirmed_rows_indices:
-                cbn_utils.pause(players_worksheet.update(f'K{int(confirmed_row_index)}', today_str))
+                cbn_utils.pause(players_worksheet.update(f'J{int(confirmed_row_index)}', today_str))
 
         # Update Schools sheet row
-        cbn_utils.pause(schools_worksheet.update(f'H{i + 2}:K{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]]))
+        cbn_utils.pause(schools_worksheet.update(f'I{i + 2}:L{i + 2}', [[school_last_roster_check, len(players), len(canadians), school.roster_page.result()]]))
 
     google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
@@ -228,10 +230,15 @@ def email_additions(to: str):
         players_df = google_sheets.df(players_worksheet)
         players_df = players_df[players_df['added'].apply(lambda x: (datetime.today() - datetime.strptime(x, "%Y-%m-%d")).days) < 4] # Players added this week
         added_players_df = pd.concat([added_players_df, players_df], ignore_index = True)
-    added_players_df = added_players_df.rename({'school': 'stats_url'}, axis = 1).merge(schools_df, how = 'left', on = 'stats_url').sort_values(by = 'last_name')
+    added_players_df = added_players_df.rename({'school_roster_url': 'roster_url'}, axis = 1).merge(schools_df, how = 'left', on = 'roster_url').sort_values(by = ['last_name', 'first_name', 'roster_url', 'stats_url'])
     added_players_df.drop_duplicates(subset = ['roster_url', 'last_name', 'first_name'], inplace = True) # keep first (highest league for a school)
     email_html = cbn_utils.player_scrape_results_email_html(added_players_df)
     cbn_utils.send_email(to, f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html, google_sheets.config)
+
+def find_player_stat_ids():
+    # TODO: NCAA needs to fix individual player pages to include pitching stats!
+    # Focus on game logs for all leagues' stats?
+    print()
 
 def stats():
     # Manual corrections
@@ -241,6 +248,7 @@ def stats():
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
+        # players_df = players_df[players_df['last_name'] == 'King']
 
         for stats_url in players_df['school'].unique():
             try:
@@ -319,8 +327,28 @@ def minors():
             cbn_utils.log(df.to_string())
         time.sleep(2)
 
+def transition_ncaa_ids():
+    # School sheet
+    schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
+    schools_df = google_sheets.df(schools_worksheet)
+    for i, school_series in schools_df.iterrows():
+        if school_series['stats_id'] == '':
+            stats_id = school_series['id']
+            if school_series['league'] == 'NCAA':
+                school_url = school_series['stats_url'].split('/stats/')[0]
+                school_sports = cbn_utils.get(school_url)
+                soup = BeautifulSoup(school_sports.text, 'html.parser')
+                for a in soup.find_all('a'):
+                    if 'Baseball' in a.text:
+                        stats_id = a['href'].split('/')[-1]
+            cbn_utils.pause(schools_worksheet.update(f'F{i + 2}:F{i + 2}', [[stats_id]]))
+
+    # Lastly, manually adjust School sheet stats_url formula to use stats_id instead of id, and change Configuration sheet to correct hitting/pitching stat ids
+
+
 # if __name__ == '__main__':
 #     schools()
 #     players()
 #     stats()
 #     minors()
+#     transition_ncaa_ids()

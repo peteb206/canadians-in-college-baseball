@@ -81,8 +81,8 @@ def update_canadians_sheet():
         ),
         df(schools_worksheet),
         how = 'inner',
-        left_on = 'school',
-        right_on = 'stats_url'
+        left_on = 'roster_url',
+        right_on = 'school_roster_url'
     )
 
     players_df.drop_duplicates(subset = ['roster_url', 'last_name', 'first_name'], inplace = True) # keep first (highest league for a school)
@@ -193,8 +193,8 @@ def update_stats_sheet():
         ),
         df(schools_worksheet),
         how = 'inner',
-        left_on = 'school',
-        right_on = 'stats_url'
+        left_on = 'roster_url',
+        right_on = 'school_roster_url'
     )
     players_df.rename({'positions': 'Position', 'name': 'School', 'state': 'State'}, axis = 1, inplace = True)
     players_df['Name'] = players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
@@ -293,7 +293,7 @@ def create_ballot_sheet():
     schools_worksheet = hub_spreadsheet.worksheet('Schools')
     players_df = pd.merge(
         pd.concat([df(players_worksheet), df(players_manual_spreadsheet)]),
-        df(schools_worksheet), how = 'inner', left_on = 'school', right_on = 'stats_url'
+        df(schools_worksheet), how = 'inner', left_on = 'roster_url', right_on = 'school_roster_url'
     ) \
         .drop_duplicates(subset = ['last_name', 'first_name', 'roster_url']) \
         .sort_values(by = ['last_name', 'first_name'], ignore_index = True) \

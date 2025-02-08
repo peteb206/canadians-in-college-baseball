@@ -34,9 +34,9 @@ def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
 
     def print_req_result(req: requests.Response):
         if not isinstance(req, requests.Response):
-            log(f' - timed out after {timeout}s')
+            print(f' - timed out after {timeout}s')
         else:
-            log(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
+            print(f' ({req.status_code}) {round(req.elapsed.total_seconds(), 2)}s')
 
     if not verify:
         log(f'WARNING: sending unverified request to {url}')
