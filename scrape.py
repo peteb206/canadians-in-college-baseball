@@ -150,8 +150,8 @@ def players():
     for i, school_series in schools_df.iterrows():
         school_last_roster_check = school_series['last_roster_check']
         days_since_last_check = (datetime.today() - datetime.strptime(school_last_roster_check, "%Y-%m-%d")).days if school_last_roster_check != '' else 99
-        if i not in [55, 56]: # test a specific school (i should be 2 less than the row number in the google sheet)
-        # if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 1):
+        # if i not in [55, 56]: # test a specific school (i should be 2 less than the row number in the google sheet)
+        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 1):
             continue # Skip schools that have no parseable roster site or have already been scraped recently
 
         school, roster_url = None, school_series['roster_url']
