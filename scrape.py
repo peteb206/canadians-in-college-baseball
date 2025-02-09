@@ -139,7 +139,7 @@ def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
     schools_df = google_sheets.df(schools_worksheet)
     players_worksheet = google_sheets.hub_spreadsheet.worksheet('Players')
-    cols = ['school', 'last_name', 'first_name', 'positions', 'throws', 'year', 'city', 'province', 'school_roster_url']
+    cols = ['school_roster_url', 'last_name', 'first_name', 'positions', 'throws', 'year', 'city', 'province']
 
     # Manual corrections
     corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
@@ -188,11 +188,10 @@ def players():
             # Re-use existing_players_df to update new_players_df with manually updated info...
             # use last_name, first_name, school to get id, throws, city, province
             scraped_school_canadians_df = pd.DataFrame([canadian.to_dict() for canadian in canadians], columns = cols)
-            scraped_school_canadians_df['school'] = school_series['stats_url']
             scraped_school_canadians_df['school_roster_url'] = roster_url
             scraped_school_canadians_df['positions'] = scraped_school_canadians_df['positions'].apply(lambda x: '/'.join(x)) # Convert list to "/" delimited string
             school_canadians_df = scraped_school_canadians_df.merge(
-                existing_school_canadians_df[['last_name', 'first_name', 'positions', 'year', 'throws', 'city', 'province', 'school_roster_url']],
+                existing_school_canadians_df[['school_roster_url', 'last_name', 'first_name', 'positions', 'year', 'throws', 'city', 'province']],
                 how = 'left',
                 on = ['school_roster_url', 'last_name', 'first_name'],
                 suffixes = ['_fetched', '']
