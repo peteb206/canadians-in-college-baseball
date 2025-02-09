@@ -41,7 +41,7 @@ def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
     if not verify:
         log(f'WARNING: sending unverified request to {url}')
 
-    print(log_prefix(), 'GET', url, end = '')
+    print(log_prefix(), 'GET ', url, sep = '', end = '')
     req = None
     try:
         req = session.get(url, headers = headers, timeout = timeout, verify = verify)
@@ -117,10 +117,10 @@ def pause(_):
     time.sleep(1)
 
 def log(message: str):
-    print(log_prefix(), message) if RUNNING_LOCALLY else print(message)
+    print(log_prefix(), message, sep = '')
 
 def log_prefix() -> str:
-    return f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]} -'
+    return f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]} - ' if RUNNING_LOCALLY else ''
 
 def check_arg_type(name = '', value = None, value_type = None):
     assert type(value) == value_type, f'"{name}" argument must be of type {value_type.__name__}, NOT {type(value).__name__}'
