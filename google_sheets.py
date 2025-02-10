@@ -81,8 +81,8 @@ def update_canadians_sheet():
         ),
         df(schools_worksheet),
         how = 'inner',
-        left_on = 'roster_url',
-        right_on = 'school_roster_url'
+        left_on = 'school_roster_url',
+        right_on = 'roster_url'
     )
 
     players_df.drop_duplicates(subset = ['roster_url', 'last_name', 'first_name'], inplace = True) # keep first (highest league for a school)
