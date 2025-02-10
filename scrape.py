@@ -229,7 +229,7 @@ def email_additions(to: str):
         players_df = google_sheets.df(players_worksheet)
         players_df = players_df[players_df['added'].apply(lambda x: (datetime.today() - datetime.strptime(x, "%Y-%m-%d")).days) < 4] # Players added this week
         added_players_df = pd.concat([added_players_df, players_df], ignore_index = True)
-    added_players_df = added_players_df.rename({'school_roster_url': 'roster_url'}, axis = 1).merge(schools_df, how = 'left', on = 'roster_url').sort_values(by = ['last_name', 'first_name', 'roster_url', 'stats_url'])
+    added_players_df = added_players_df.rename({'school_roster_url': 'roster_url'}, axis = 1).merge(schools_df, how = 'left', on = 'roster_url').sort_values(by = ['last_name', 'first_name', 'roster_url'])
     added_players_df.drop_duplicates(subset = ['roster_url', 'last_name', 'first_name'], inplace = True) # keep first (highest league for a school)
     email_html = cbn_utils.player_scrape_results_email_html(added_players_df)
     cbn_utils.send_email(to, f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html, google_sheets.config)
