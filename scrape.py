@@ -237,7 +237,42 @@ def email_additions(to: str):
 def find_player_stat_ids():
     # TODO: NCAA needs to fix individual player pages to include pitching stats!
     # Focus on game logs for all leagues' stats?
-    print()
+    # Manual corrections
+    corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
+    corrections = dict(zip(corrections_df['From'], corrections_df['To']))
+
+    schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
+    schools_df = google_sheets.df(schools_worksheet)
+
+    for sheet_name in ['Players (Manual)', 'Players']:
+        players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
+        players_df = google_sheets.df(players_worksheet)
+        players_df = players_df[players_df['stats_url'] == '']
+        players_df['row'] = players_df.index.to_series() + 2
+
+        players_df = pd.merge(
+            players_df,
+            schools_df,
+            how = 'inner',
+            left_on = 'school_roster_url',
+            right_on = 'roster_url',
+            suffixes = ['', '_school']
+        )
+
+        for school_stats_url in players_df['stats_url_school'].unique():
+            stats_page = StatsPage(school_stats_url, corrections = corrections)
+            if (len(stats_page.to_df().index) == 0):
+                continue
+            stats_urls_to_add = pd.merge(
+                players_df[players_df['stats_url_school'] == school_stats_url].drop('stats_url', axis = 1),
+                stats_page.to_df(),
+                how = 'inner',
+                on = ['last_name', 'first_name']
+            )
+            for _, player_row in stats_urls_to_add.iterrows():
+                cbn_utils.pause(players_worksheet.update(f'L{int(player_row["row"])}', player_row['stats_url']))
+
+        google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
 def stats():
     # Manual corrections
@@ -247,23 +282,25 @@ def stats():
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
-        # players_df = players_df[players_df['last_name'] == 'King']
 
-        for stats_url in players_df['school'].unique():
+        for i, player_row in players_df.iterrows():
+            player_last_stats_update = player_row['last_stats_update']
+            days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
+            if (days_since_last_check < 1) | (player_row['stats_url'] == ''):
+                continue
+            player = Player(
+                last_name = player_row['last_name'],
+                first_name = player_row['first_name'],
+                stats_url = player_row['stats_url']
+            )
             try:
-                stats_page = StatsPage(stats_url, corrections = corrections)
-                for i, player_row in players_df[players_df['school'] == stats_url].iterrows():
-                    player = Player(
-                        last_name = player_row['last_name'],
-                        first_name = player_row['first_name']
-                    )
-                    player.add_stats(stats_page)
-                    if player.id != '':
-                        # Update player stats
-                        stat_values = list(player.to_dict().values())[14:]
-                        cbn_utils.pause(players_worksheet.update(f'J{i + 2}:AH{i + 2}', [[player.id] + stat_values]))
+                success = player.add_stats(google_sheets.config['ACADEMIC_YEAR'])
+                if success == False:
+                    continue
+                stat_values = list(player.to_dict().values())[13:]
+                cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[today_str, player_row['stats_url']] + stat_values]))
             except Exception as e:
-                cbn_utils.log(f'ERROR: Player.add_stats - {stats_url} - {str(e)}')
+                cbn_utils.log(f'ERROR: Player.add_stats - {player_row["stats_url"]} - {str(e)}')
 
 def positions():
     # Manual corrections
@@ -326,23 +363,21 @@ def minors():
             cbn_utils.log(df.to_string())
         time.sleep(2)
 
-def transition_ncaa_ids():
+def find_school_stats_ids():
     # School sheet
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
     schools_df = google_sheets.df(schools_worksheet)
     for i, school_series in schools_df.iterrows():
-        if school_series['stats_id'] == '':
-            stats_id = school_series['id']
-            if school_series['league'] == 'NCAA':
-                school_url = school_series['stats_url'].split('/stats/')[0]
-                school_sports = cbn_utils.get(school_url)
-                soup = BeautifulSoup(school_sports.text, 'html.parser')
-                for a in soup.find_all('a'):
-                    if 'Baseball' in a.text:
-                        stats_id = a['href'].split('/')[-1]
-            cbn_utils.pause(schools_worksheet.update(f'F{i + 2}:F{i + 2}', [[stats_id]]))
-
-    # Lastly, manually adjust School sheet stats_url formula to use stats_id instead of id, and change Configuration sheet to correct hitting/pitching stat ids
+        stats_id = ''
+        if school_series['league'] == 'NCAA':
+            school_url = school_series['stats_url'].split('/stats/')[0]
+            school_sports = cbn_utils.get(school_url)
+            soup = BeautifulSoup(school_sports.text, 'html.parser')
+            for a in soup.find_all('a'):
+                if 'Baseball' in a.text:
+                    stats_id = a['href'].split('/')[-1]
+        if stats_id != '':
+            cbn_utils.pause(schools_worksheet.update(f'F{i + 2}', stats_id))
 
 
 # if __name__ == '__main__':
@@ -351,3 +386,4 @@ def transition_ncaa_ids():
 #     stats()
 #     minors()
 #     transition_ncaa_ids()
+#     find_player_stat_ids()

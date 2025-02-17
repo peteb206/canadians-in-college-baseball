@@ -22,4 +22,14 @@ jobs:
             env:
                GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
             run: |
-               python -c 'import google_sheets; import scrape; google_sheets.update_canadians_sheet(); scrape.email_additions("bob");'
+               python -c 'import google_sheets; google_sheets.update_canadians_sheet();'
+         -  name: email additions
+            env:
+               GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
+            run: |
+               python -c 'import scrape; scrape.email_additions("bob");'
+         -  name: find player stat ids
+            env:
+               GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
+            run: |
+               python -c 'import scrape; scrape.find_player_stat_ids();'

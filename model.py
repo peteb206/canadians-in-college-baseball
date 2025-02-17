@@ -491,87 +491,150 @@ class RosterPage(WebPage):
         return city, province 
 
 class StatsPage(WebPage):
-    def __init__(self, url = '', corrections: dict[str, str] = dict()):
+    def __init__(self, url = '', academic_year = '', corrections: dict[str, str] = dict()):
         WebPage.__init__(self, url)
         self.__df__: pd.DataFrame = None
         self.__corrections__ = corrections
-        if url != '':
-            self.__fetch_stats__()
+        if url.endswith('roster') | url.endswith('lineup'):
+            self.__fetch_stat_ids__()
+        elif url != '':
+            self.__fetch_stats__(academic_year)
 
     def to_df(self):
         return self.__df__
 
-    def __fetch_stats__(self):
-        if self.__df__ != None:
-            return self.df
+    def __fetch_stat_ids__(self):
         url, html = self.url(), self.html()
+        url_parts = urlparse(url)
         if self.success() == False:
             return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
         soup = BeautifulSoup(html, 'html.parser')
-        if cbn_utils.NCAA_DOMAIN in url:
-            hitting_table = soup.find('table', {'id': 'stat_grid'})
-            if hitting_table == None:
-                return
-            hitting_df = pd.read_html(str(hitting_table))[0].replace('-', 0)
-            hitting_df = hitting_df[hitting_df['GP'].astype(int) > 0]
-            def get_ncaa_id(x):
-                try: return hitting_table.find('a', text = x)['href'].split('stats_player_seq=')[-1]
-                except: return ''
-            hitting_df['id'] = hitting_df['Player'].apply(lambda x: get_ncaa_id(x))
-            url_parts = urlparse(url)
-            pitching_stats_page = WebPage(url = f'{url_parts.scheme}://{url_parts.netloc}{soup.find("a", text = "Pitching")["href"]}')
-            html = pitching_stats_page.html()
-            soup = BeautifulSoup(html, 'html.parser')
-            pitching_table = soup.find('table', {'id': 'stat_grid'})
-            pitching_df = pd.read_html(str(pitching_table))[0].replace('-', 0)
-            pitching_df = pitching_df[pitching_df['GP'].astype(int) > 0]
-            pitching_df['id'] = pitching_df['Player'].apply(lambda x: get_ncaa_id(x))
-            df = pd.merge(
-                hitting_df[['id', 'Player', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'BA', 'OBPct', 'SlgPct']],
-                pitching_df[['id', 'App', 'GS.1', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'SO']],
-                how = 'outer',
-                on = 'id',
-                suffixes = ['', 'A']
-            )
-            df['Player'].replace(self.__corrections__, inplace = True)
-            df['last_name'] = df['Player'].apply(lambda x: RosterPage.format_player_name(x)[1])
-            df['first_name'] = df['Player'].apply(lambda x: RosterPage.format_player_name(x)[0])
-            df['OPS'] = df.OBPct.astype(float) + df.SlgPct.astype(float)
-            self.__df__ = df.drop('Player', axis = 1).fillna(0).rename({'BA': 'AVG', 'OBPct': 'OBP', 'SlgPct': 'SLG', 'App': 'APP', 'GS.1': 'GS', 'SO': 'K'}, axis = 1)
+        player_links = list()
+        if url.endswith('lineup'):
+            for div in soup.find_all('div', {'class': 'tabbed-ajax-content'}):
+                if 'data-url' in div.attrs:
+                    data_url = f'{url_parts.scheme}://{url_parts.netloc}{div["data-url"]}'
+                    if ('&pos=h&r=0&' in data_url) | ('&pos=p&r=0&' in data_url):
+                        players_page = cbn_utils.get(data_url)
+                        if players_page != None:
+                            soup2 = BeautifulSoup(players_page.text, 'html.parser')
+                            for a in soup2.find_all('a'):
+                                if '/players/' in a['href']:
+                                    player = a.text
+                                    for correct_from, correct_to in self.__corrections__.items():
+                                        player = player.replace(correct_from, correct_to)
+                                    last_name = RosterPage.format_player_name(player)[1]
+                                    first_name = RosterPage.format_player_name(player)[0]
+                                    player_links.append({'last_name': last_name, 'first_name': first_name, 'stats_url': f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}'})
         else:
-            combined_df = None
-            for table in soup.find_all('table'):
-                player_stat_table = False
-                for a in table.find_all('a'):
-                    if '/players/' in a['href']:
-                        player_stat_table = True
-                        break
-                if player_stat_table:
-                    ids_dict = {re.sub(' +', ' ', a.text.replace('\n', '').replace('\r', '').strip()): a['href'].split('/')[-1]
-                                for a in table.find_all('a') if '/players/' in a['href']}
-                    df = pd.read_html(str(table))[0].replace('-', 0).query('~Name.isin(["Totals", "Opponent"])')
-                    df.rename({col: 'G' if col == 'gp' else col.upper() for col in df.columns}, axis = 1, inplace = True)
-                    if 'AB' in df.columns:
-                        df.drop(['BB', 'K'], axis = 1, inplace = True)
-                    elif 'APP' in df.columns:
-                        df.rename({'H': 'HA'}, axis = 1, inplace = True)
-                    df.NAME = df.NAME.apply(lambda x: re.sub(' +', ' ', x))
-                    df['id'] = df.NAME.apply(lambda x: ids_dict[x] if x in ids_dict.keys() else '')
-                    if type(combined_df) == pd.DataFrame:
-                        combined_df = combined_df.merge(df.loc[:, ['id', 'NAME'] + [col for col in df.columns if col not in combined_df.columns]],
-                                                        how = 'outer', on = ['id', 'NAME'])
+            for a in soup.find_all('a'):
+                if '/players/' in a['href']:
+                    player = a.text
+                    for correct_from, correct_to in self.__corrections__.items():
+                        player = player.replace(correct_from, correct_to)
+                    last_name = RosterPage.format_player_name(player)[1]
+                    first_name = RosterPage.format_player_name(player)[0]
+                    player_links.append({'last_name': last_name, 'first_name': first_name, 'stats_url': f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}'})
+        self.__df__ = pd.DataFrame(player_links).drop_duplicates(ignore_index = True)
+        return self.__df__
+
+    def __fetch_stats__(self, academic_year):
+        url, html = self.url(), self.html()
+        if self.success() == False:
+            return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
+        df_columns = list(cbn_utils.stats_labels['batting'].keys()) + list(cbn_utils.stats_labels['pitching'].keys())
+        hitting_df, pitching_df = pd.DataFrame(), pd.DataFrame()
+        if cbn_utils.NCAA_DOMAIN in url:
+            soup = BeautifulSoup(html, 'html.parser')
+            hitting_cols = ['G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'BA', 'OBPct', 'SlgPct']
+            pitching_cols = ['App', 'GS', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'SO']
+            hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
+            for tab in ['current', 'other']:
+                dfs = pd.read_html(html)
+                for df in dfs:
+                    if 'Year' not in df.columns:
+                        continue
+                    if 'ERA' in df.columns:
+                        pitching_df = df[df['Year'] == academic_year]
+                        pitching_df = pitching_df[pitching_cols]
                     else:
-                        combined_df = df.copy()
-            if type(combined_df) == pd.DataFrame:
-                combined_df.NAME.replace(self.__corrections__, inplace = True)
-                combined_df['last_name'] = combined_df.NAME.apply(lambda x: RosterPage.format_player_name(x)[1])
-                combined_df['first_name'] = combined_df.NAME.apply(lambda x: RosterPage.format_player_name(x)[0])
-                combined_df['OPS'] = combined_df.OBP.astype(float) + combined_df.SLG.astype(float)
-                for col in ['W', 'L', 'SV', 'BB']: # TODO: remove this whenever NAIA/CCCAA stats pages start tracking W, L, SV, BB again
-                    if col not in combined_df.columns:
-                        combined_df[col] = 0
-                stat_cols = [col for stat_type in cbn_utils.stats_labels.keys() for col in cbn_utils.stats_labels[stat_type].keys()]
-                self.__df__ = combined_df.fillna(0).loc[:, ['id', 'last_name', 'first_name'] + stat_cols]
+                        hitting_df = df[df['Year'] == academic_year]
+                        hitting_df = hitting_df[hitting_cols]
+                if tab == 'other':
+                    for a in soup.find_all('a'):
+                        if (a.text in ['Hitting', 'Pitching']) & ('year_stat_category_id' in a['href']):
+                            url_parts = urlparse(url)
+                            html = cbn_utils.get(f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}').text
+
+            hitting_df['OPS'] = hitting_df['OBPct'].astype(float) + hitting_df['SlgPct'].astype(float)
+            self.__df__ = pd.merge(
+                hitting_df,
+                pitching_df,
+                how = 'inner' if (len(hitting_df.index) > 0) & (len(pitching_df.index) > 0) else 'left' if len(hitting_df.index) > 0 else 'right' if len(pitching_df.index) > 0 else 'outer',
+                left_index = True,
+                right_index = True,
+                suffixes = ['', 'A'] # H vs HA
+            )
+            self.__df__.fillna(0, inplace = True)
+            if (len(self.__df__.index) == 0):
+                self.__df__ = pd.DataFrame(0, columns = self.__df__.columns, index = [0])
+            self.__df__.columns = df_columns
+        elif (cbn_utils.JUCO_DOMAIN in url) | (cbn_utils.NWAC_DOMAIN in url):
+            hitting_cols = ['Games', 'At Bats', 'Runs', 'Hits', 'Doubles', 'Triples', 'Home Runs', 'Runs Batted In', 'Stolen Bases', 'Batting Average', 'On Base Percentage', 'Slugging Percentage']
+            pitching_cols = ['Appearances', 'Games started', 'Innings Pitched', 'Wins', 'Losses', 'Earned Runs', 'Hits', 'Walks', 'Earned Run Average', 'Saves', 'Strikeouts']
+            dfs = pd.read_html(html)
+            for df in dfs:
+                if 'Overall' not in df.columns:
+                    continue
+                df.rename({'&nbsp': 'Statistics category'}, axis = 1, inplace = True)
+
+                hitting_df = df.drop_duplicates(subset = 'Statistics category', keep = 'first')
+                hitting_df = hitting_df[hitting_df['Statistics category'].isin(hitting_cols)]
+                hitting_df.replace('-', 0, inplace = True)
+                hitting_df = pd.DataFrame([dict(zip(hitting_df['Statistics category'], hitting_df['Overall']))])
+                hitting_df = hitting_df[hitting_cols]
+                hitting_df['OPS'] = hitting_df['On Base Percentage'].astype(float) + hitting_df['Slugging Percentage'].astype(float)
+
+                pitching_df = df.drop_duplicates(subset = 'Statistics category', keep = 'last')
+                pitching_df = pitching_df[pitching_df['Statistics category'].isin(pitching_cols)]
+                pitching_df.replace('-', 0, inplace = True)
+                pitching_df = pd.DataFrame([dict(zip(pitching_df['Statistics category'], pitching_df['Overall']))])
+                pitching_df = pitching_df[pitching_cols]
+
+                self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
+                self.__df__.columns = df_columns
+                break
+        else:
+            hitting_cols = ['gp', 'ab', 'r', 'h', '2b', '3b', 'hr', 'rbi', 'sb', 'avg', 'obp', 'slg']
+            pitching_cols = ['app', 'gs', 'ip', 'w', 'l', 'er', 'h', 'whip', 'era', 'sv', 'k'] # whip will be converted to bb
+            hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
+            dfs = pd.read_html(html)
+            for df in dfs:
+                if 'Date' in df.columns:
+                    continue
+                if 'gp' in df.columns:
+                    if len(hitting_df.index) == 0:
+                        hitting_df = df[df['Unnamed: 0'] == academic_year]
+                    else:
+                        hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'] == academic_year], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+                elif 'app' in df.columns:
+                    if len(pitching_df.index) == 0:
+                        pitching_df = df[df['Unnamed: 0'] == academic_year]
+                    else:
+                        pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'] == academic_year], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+
+            hitting_df = hitting_df[hitting_cols]
+            hitting_df.replace('-', 0, inplace = True)
+            hitting_df['ops'] = hitting_df['obp'].astype(float) + hitting_df['slg'].astype(float)
+
+            pitching_df = pitching_df[pitching_cols]
+            pitching_df.replace('-', 0, inplace = True)
+            pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'] - pitching_df['h']
+            pitching_df.rename({'whip': 'bb'}, axis = 1, inplace = True)
+            pitching_df['bb'] = pitching_df['bb'].round()
+
+            self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
+            self.__df__.columns = df_columns   
         return self.__df__
 
 class SchedulePage(WebPage):
@@ -655,7 +718,7 @@ class School:
         return list()
 
 class Player:
-    def __init__(self, last_name = '', first_name = '', positions: set[str] = set(), throws = '', year = '', city = '', province = '', canadian = False, stats_id = ''):
+    def __init__(self, last_name = '', first_name = '', positions: set[str] = set(), throws = '', year = '', city = '', province = '', canadian = False, stats_url = ''):
         # Check types
         cbn_utils.check_arg_type(name = 'last_name', value = last_name, value_type = str)
         cbn_utils.check_arg_type(name = 'first_name', value = first_name, value_type = str)
@@ -665,7 +728,7 @@ class Player:
         cbn_utils.check_arg_type(name = 'city', value = city, value_type = str)
         cbn_utils.check_arg_type(name = 'province', value = province, value_type = str)
         cbn_utils.check_arg_type(name = 'canadian', value = canadian, value_type = bool)
-        cbn_utils.check_arg_type(name = 'stats_id', value = stats_id, value_type = str)
+        cbn_utils.check_arg_type(name = 'stats_url', value = stats_url, value_type = str)
 
         # Check values
         cbn_utils.check_string_arg(name = 'last_name', value = last_name, disallowed_values = [''])
@@ -684,7 +747,7 @@ class Player:
         self.city = city
         self.province = province
         self.canadian = canadian
-        self.id = stats_id
+        self.stats_url = stats_url
         self.G = 0
         self.AB = 0
         self.R = 0
@@ -715,7 +778,6 @@ class Player:
 
     def to_dict(self):
         return {
-            'id': self.id,
             'last_name': self.last_name,
             'first_name': self.first_name,
             'positions': self.positions,
@@ -723,7 +785,7 @@ class Player:
             'year': self.year,
             'city': self.city,
             'province': self.province,
-            'school': self.school.stats_page.url() if self.school != None else '',
+            'stats_url': self.stats_url,
             'school_roster_url': self.school.roster_page.url() if self.school != None else '',
             'league': self.school.league if self.school != None else '',
             'division': self.school.division if self.school != None else '',
@@ -755,15 +817,15 @@ class Player:
             'K': self.K
         }
 
-    def add_stats(self, stats_page: StatsPage):
+    def add_stats(self, academic_year) -> bool:
+        stats_page = StatsPage(url = self.stats_url, academic_year = academic_year)
         stats_df = stats_page.to_df()
         if not isinstance(stats_df, pd.DataFrame):
-            return
-        stat_dict_list = stats_df[(stats_df['last_name'].str.lower() == self.last_name.lower()) & (stats_df['first_name'].str.lower() == self.first_name.lower())].to_dict(orient = 'records')
+            return False
+        stat_dict_list = stats_df.to_dict(orient = 'records')
         if len(stat_dict_list) == 0:
-            return
+            return False
         stat_dict = stat_dict_list[0]
-        self.id = str(stat_dict['id'])
         self.G = int(stat_dict['G'])
         self.AB = int(stat_dict['AB'])
         self.R = int(stat_dict['R'])
@@ -788,3 +850,4 @@ class Player:
         self.ERA = round(float(stat_dict['ERA']), 2) if float(stat_dict['ERA']) < 100 else 99.99
         self.SV = int(stat_dict['SV'])
         self.K = int(stat_dict['K'])
+        return True
