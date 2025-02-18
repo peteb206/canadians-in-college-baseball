@@ -193,8 +193,8 @@ def update_stats_sheet():
         ),
         df(schools_worksheet),
         how = 'inner',
-        left_on = 'roster_url',
-        right_on = 'school_roster_url'
+        left_on = 'school_roster_url',
+        right_on = 'roster_url'
     )
     players_df.rename({'positions': 'Position', 'name': 'School', 'state': 'State'}, axis = 1, inplace = True)
     players_df['Name'] = players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
