@@ -828,6 +828,8 @@ class Player:
         stat_dict = stat_dict_list[0]
         self.G = int(stat_dict['G'])
         self.AB = int(stat_dict['AB'])
+        if self.AB < 10:
+            self.G = 0 # Some leagues count pitcher appearances as games, too
         self.R = int(stat_dict['R'])
         self.H = int(stat_dict['H'])
         self._2B = int(stat_dict['2B'])
