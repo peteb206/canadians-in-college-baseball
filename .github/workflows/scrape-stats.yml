@@ -1,7 +1,7 @@
 name: scrape-stats
 on:
    schedule:
-      - cron: '0 20 * 2-7 1' # https://crontab.guru
+      - cron: '0 17 * 2-7 1' # https://crontab.guru
    workflow_dispatch:
 jobs:
    build:
