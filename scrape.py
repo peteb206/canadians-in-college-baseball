@@ -56,6 +56,8 @@ def schools():
         url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/div{division}/teams'
         if division not in [1, 2, 3]:
             url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams'
+            if league == 'NAIA':
+                url = f'{url}?dec=printer-decorator'
         html = cbn_utils.get(url).text
         soup = BeautifulSoup(html, 'html.parser')
         schools = list()
