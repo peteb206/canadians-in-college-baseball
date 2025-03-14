@@ -284,7 +284,7 @@ def stats():
 
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
-        players_df = google_sheets.df(players_worksheet).query('last_name == "Pettipiece"')
+        players_df = google_sheets.df(players_worksheet)
 
         for i, player_row in players_df.iterrows():
             player_last_stats_update = player_row['last_stats_update']
