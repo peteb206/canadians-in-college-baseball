@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime
 import time
 import re
+import json
 
 pd.set_option('display.max_columns', None) # show all cols
 pd.set_option('display.max_colwidth', None) # show full width of showing cols
@@ -283,7 +284,7 @@ def stats():
 
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
-        players_df = google_sheets.df(players_worksheet)
+        players_df = google_sheets.df(players_worksheet).query('last_name == "Pettipiece"')
 
         for i, player_row in players_df.iterrows():
             player_last_stats_update = player_row['last_stats_update']
@@ -343,6 +344,78 @@ def positions():
                     )
 
 def minors():
+    players_worksheet = google_sheets.hub_spreadsheet.worksheet('Players (Minors)')
+    players_df = google_sheets.df(players_worksheet)
+    players_df['row'] = players_df.index.to_series() + 2
+
+    def province(abbreviation):
+        return {
+            'AB': 'Alberta',
+            'BC': 'British Columbia',
+            'MB': 'Manitoba',
+            'NF': 'Newfoundland & Labrador',
+            'NS': 'Nova Scotia',
+            'ON': 'Ontario',
+            'QC': 'Quebec',
+            'SK': 'Saskatchewan'
+        }[abbreviation]
+
+    teams_req = cbn_utils.get('https://statsapi.mlb.com/api/v1/teams')
+    teams_json = json.loads(teams_req.text)
+    teams_df = pd.DataFrame(teams_json['teams'])[['id', 'name', 'parentOrgName']]
+    teams_df['parentOrgName'].replace('Office of the Commissioner', pd.NA, inplace = True)
+    teams_df['org'] = teams_df['parentOrgName'].combine_first(teams_df['name'])
+    teams_dict = dict(zip(teams_df['id'], teams_df['org']))
+
+    scraped_players_df = pd.DataFrame()
+    levels_req = cbn_utils.get('https://statsapi.mlb.com/api/v1/sports')
+    levels_json = json.loads(levels_req.text)
+    for level in levels_json['sports']:
+        if level['code'] in ['win', 'nlb', 'int', 'nae', 'nas', 'ame', 'bbc', 'hsb']:
+            continue
+        players_req = cbn_utils.get(f'https://statsapi.mlb.com/api/v1/sports/{level["id"]}/players')
+        players_json = json.loads(players_req.text)
+        for player in players_json['people']:
+            if 'birthCountry' not in player.keys():
+                continue
+            if player['birthCountry'] != 'Canada':
+                continue
+            scraped_player = pd.DataFrame([
+                {
+                    'mlbam_id': player['id'],
+                    'last_name': player['lastName'],
+                    'first_name': player['useName'],
+                    'city': player['birthCity'],
+                    'province': province(player['birthStateProvince']),
+                    'level': level['abbreviation'],
+                    'org': teams_dict[player['currentTeam']['id']]
+                }
+            ])
+            scraped_players_df = pd.concat([scraped_players_df, scraped_player], ignore_index = True).drop_duplicates(subset = 'mlbam_id', ignore_index = True)
+        time.sleep(1)
+
+    compare_df = pd.merge(players_df.astype({'mlbam_id': int}), scraped_players_df, how = 'outer', on = 'mlbam_id', indicator = 'source')
+    rows_to_add_df = compare_df[compare_df['source'] == 'right_only'].copy()
+    if len(rows_to_add_df.index) > 0:
+        rows_to_add_df['last_name'] = rows_to_add_df['last_name_y']
+        rows_to_add_df['first_name'] = rows_to_add_df['first_name_y']
+        rows_to_add_df['city'] = rows_to_add_df['city_y']
+        rows_to_add_df['province'] = rows_to_add_df['province_y']
+        rows_to_add_df['org'] = rows_to_add_df['org_y']
+        rows_to_add_df['added'] = today_str
+        rows_to_add_df['last_confirmed'] = today_str
+        rows_to_add_df['last_stats_update'] = ''
+        rows_to_add_df['bbref'] = ''
+        rows_to_add_df = rows_to_add_df[players_df.columns[:10]]
+        cbn_utils.pause(players_worksheet.append_rows(rows_to_add_df.values.tolist()))
+    confirmed_df = compare_df[compare_df['source'] == 'both']['row'].to_list()
+    for confirmed_row in confirmed_df.iterrows():
+        cbn_utils.pause(players_worksheet.update(f'F{int(confirmed_row["row"])}', today_str))
+        cbn_utils.pause(players_worksheet.update(f'J{int(confirmed_row["row"])}', confirmed_row['org_y']))
+
+    players_df = google_sheets.df(players_worksheet)
+    google_sheets.set_sheet_header(players_worksheet, sort_by = ['last_name', 'first_name', 'level'])
+
     year = datetime.now().year
     bbref_base_url = 'https://www.baseball-reference.com'
     bbref_canadians_req = cbn_utils.get(f'{bbref_base_url}/bio/Canada_born.shtml')

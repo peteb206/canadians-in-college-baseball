@@ -629,7 +629,7 @@ class StatsPage(WebPage):
 
             pitching_df = pitching_df[pitching_cols]
             pitching_df.replace('-', 0, inplace = True)
-            pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'] - pitching_df['h']
+            pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'].astype(float) - pitching_df['h'].astype(int)
             pitching_df.rename({'whip': 'bb'}, axis = 1, inplace = True)
             pitching_df['bb'] = pitching_df['bb'].round()
 
