@@ -238,8 +238,6 @@ def email_additions(to: str):
     cbn_utils.send_email(to, f'New Players (Week of {datetime.now().strftime("%B %d, %Y")})', email_html, google_sheets.config)
 
 def find_player_stat_ids():
-    # TODO: NCAA needs to fix individual player pages to include pitching stats!
-    # Focus on game logs for all leagues' stats?
     # Manual corrections
     corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
     corrections = dict(zip(corrections_df['From'], corrections_df['To']))
@@ -264,7 +262,7 @@ def find_player_stat_ids():
 
         for school_stats_url in players_df['stats_url_school'].unique():
             stats_page = StatsPage(school_stats_url, corrections = corrections)
-            if (len(stats_page.to_df().index) == 0):
+            if len(stats_page.to_df().index) == 0:
                 continue
             stats_urls_to_add = pd.merge(
                 players_df[players_df['stats_url_school'] == school_stats_url].drop('stats_url', axis = 1),
@@ -289,7 +287,7 @@ def stats():
         for i, player_row in players_df.iterrows():
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
-            if (days_since_last_check < 1) | (player_row['stats_url'] == ''):
+            if (days_since_last_check <= 1) | (player_row['stats_url'] == ''):
                 continue
             player = Player(
                 last_name = player_row['last_name'],

@@ -617,7 +617,7 @@ class StatsPage(WebPage):
                         hitting_df = df[df['Unnamed: 0'] == academic_year]
                     else:
                         hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'] == academic_year], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
-                elif 'app' in df.columns:
+                elif (len(df.index) <= 6) & (('app' in df.columns) | ('er' in df.columns)):
                     if len(pitching_df.index) == 0:
                         pitching_df = df[df['Unnamed: 0'] == academic_year]
                     else:
