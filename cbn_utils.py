@@ -195,7 +195,7 @@ city_strings = {
 }
 
 province_strings = {
-    'Alberta': ['alberta', ', alta.', ', ab', 'a.b.', ',ab'],
+    'Alberta': ['alberta', ', alta.', ', ab', 'a.b.', ',ab', ', alb'],
     'British Columbia': ['british columbia', 'b.c', ' bc', ',bc'],
     'Manitoba': ['manitoba', ', mb', ', man.', ',mb'],
     'New Brunswick': ['new brunswick', ', nb', 'n.b.', ',nb'],
