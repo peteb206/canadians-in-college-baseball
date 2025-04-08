@@ -383,6 +383,7 @@ def minors():
                     'mlbam_id': player['id'],
                     'last_name': player['lastName'],
                     'first_name': player['useName'],
+                    'position': player['primaryPosition']['abbreviation'],
                     'city': player['birthCity'],
                     'province': province(player['birthStateProvince']),
                     'level': level['abbreviation'],
@@ -392,49 +393,55 @@ def minors():
             scraped_players_df = pd.concat([scraped_players_df, scraped_player], ignore_index = True).drop_duplicates(subset = 'mlbam_id', ignore_index = True)
         time.sleep(1)
 
-    compare_df = pd.merge(players_df.astype({'mlbam_id': int}), scraped_players_df, how = 'outer', on = 'mlbam_id', indicator = 'source')
-    rows_to_add_df = compare_df[compare_df['source'] == 'right_only'].copy()
-    if len(rows_to_add_df.index) > 0:
-        rows_to_add_df['last_name'] = rows_to_add_df['last_name_y']
-        rows_to_add_df['first_name'] = rows_to_add_df['first_name_y']
-        rows_to_add_df['city'] = rows_to_add_df['city_y']
-        rows_to_add_df['province'] = rows_to_add_df['province_y']
-        rows_to_add_df['org'] = rows_to_add_df['org_y']
-        rows_to_add_df['added'] = today_str
-        rows_to_add_df['last_confirmed'] = today_str
-        rows_to_add_df['last_stats_update'] = ''
-        rows_to_add_df['bbref'] = ''
-        rows_to_add_df = rows_to_add_df[players_df.columns[:10]]
-        cbn_utils.pause(players_worksheet.append_rows(rows_to_add_df.values.tolist()))
-    confirmed_df = compare_df[compare_df['source'] == 'both']['row'].to_list()
-    for confirmed_row in confirmed_df.iterrows():
-        cbn_utils.pause(players_worksheet.update(f'F{int(confirmed_row["row"])}', today_str))
-        cbn_utils.pause(players_worksheet.update(f'J{int(confirmed_row["row"])}', confirmed_row['org_y']))
+    updated_players_df = pd.concat([players_df, scraped_players_df], ignore_index = True)
+    updated_players_df['mlbam_id'] = updated_players_df['mlbam_id'].astype('int')
+    updated_players_df = updated_players_df.groupby('mlbam_id').agg({
+        'last_name': 'last',
+        'first_name': 'last',
+        'position': 'last',
+        'city': 'last',
+        'province': 'last',
+        'added': 'first',
+        'last_confirmed': 'last',
+        'last_stats_update': 'first',
+        'bbref': 'first',
+        'org': 'last'
+    }).reset_index()
+    updated_players_df['added'] = updated_players_df['added'].fillna(today_str)
 
-    players_df = google_sheets.df(players_worksheet)
-    google_sheets.set_sheet_header(players_worksheet, sort_by = ['last_name', 'first_name', 'level'])
-
+    # Stats
     year = datetime.now().year
-    bbref_base_url = 'https://www.baseball-reference.com'
-    bbref_canadians_req = cbn_utils.get(f'{bbref_base_url}/bio/Canada_born.shtml')
-    soup = BeautifulSoup(bbref_canadians_req.text, 'html.parser')
-    player_links = list(soup.find_all('a'))
-    cbn_utils.log(f'{len(player_links)} player links found')
-    for player_link in player_links:
-        if ('/players/' not in player_link['href']) | (not player_link['href'].endswith('.shtml')):
-            continue
-        bbref_player_req = cbn_utils.get(f'{bbref_base_url}{player_link["href"]}')
+    stats_df = pd.DataFrame()
+    for i, player_series in updated_players_df.iterrows():
+        if player_series['bbref'] == '': continue
+        bbref_player_req = cbn_utils.get(player_series['bbref'])
         dfs = pd.read_html(bbref_player_req.text)
         for df in dfs:
-            if ('OPS' not in df.columns) | ('SV' not in df.columns):
-                # Not a relevant table
-                continue
-            year_df = df[df['Year'].str.contains(str(year))]
-            if len(year_df.index) == 0:
-                # No stats this year
-                continue
-            cbn_utils.log(df.to_string())
+            if 'Year' not in df.columns: continue
+            year_df = df[df['Year'].str.contains(str(year)).fillna(False) & ~df['Lev'].isin(['Maj'])]
+            if len(year_df.index) == 0: continue
+            year_batting_df = pd.DataFrame(columns = ['Tm', 'Lev', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'AVG', 'OBP', 'SLG', 'OPS'])
+            year_pitching_df = pd.DataFrame(columns = ['Tm', 'Lev', 'APP', 'GS', 'IP', 'W', 'L', 'ER', 'HA', 'BB', 'ERA', 'SV', 'K'])
+            if 'OPS' in year_df.columns:
+                year_batting_df = pd.concat([year_batting_df, year_df.rename({'BA': 'AVG'}, axis = 1)], ignore_index = True)[year_batting_df.columns]
+            elif 'SV' in year_df.columns:
+                year_pitching_df = pd.concat([year_pitching_df, year_df.rename({'G': 'APP', 'H': 'HA', 'SO': 'K'}, axis = 1)], ignore_index = True)[year_pitching_df.columns]
+            year_combined_df = pd.merge(year_batting_df, year_pitching_df, 'outer', on = ['Tm', 'Lev'])
+            year_combined_df.fillna('', inplace = True)
+            year_combined_df = year_combined_df.astype('str')
+            year_combined_df['mlbam_id'] = player_series['mlbam_id']
+            stats_df = pd.concat([stats_df, year_combined_df], ignore_index = True)
+            updated_players_df.loc[i, 'last_stats_update'] = today_str
         time.sleep(2)
+
+    updated_players_df['last_confirmed'] = today_str
+    updated_players_df = pd.merge(updated_players_df, stats_df, 'left', on = 'mlbam_id')
+    updated_players_df.rename({'Tm': 'team', 'Lev': 'level'}, axis = 1, inplace = True)
+    updated_players_df.sort_values(['last_name', 'first_name', 'level', 'G', 'APP'], ascending = [True, True, False, False, False], ignore_index = True, inplace = True)
+    updated_players_df.fillna('', inplace = True)
+    if len(players_df.index) > 0:
+        cbn_utils.pause(players_worksheet.delete_rows(2, len(players_df.index) + 1))
+    cbn_utils.pause(players_worksheet.append_rows(updated_players_df.values.tolist()))
 
 def find_school_stats_ids():
     # School sheet
