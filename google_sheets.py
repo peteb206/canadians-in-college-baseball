@@ -671,7 +671,125 @@ def copy_and_paste_sheet(destination_spreadsheet: gspread.Spreadsheet, source_wo
         }
     )
 
+def update_minors_sheet():
+    players_worksheet = hub_spreadsheet.worksheet('Players (Minors)')
+    players_df = df(players_worksheet)
+    data = []
+    player_ids = list()
+    for player_type in ['Hitters', 'Pitchers']:
+        player_type_players_df = players_df[~players_df['AB' if player_type == 'Hitters' else 'APP'].isin(['0', ''])].copy()
+        player_ids += player_type_players_df['mlbam_id'].to_list()
+        player_type_players_df['Player'] = player_type_players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
+        player_type_players_df['Hometown'] = player_type_players_df.apply(lambda row: f'{row["city"]}, {row["province"]}', axis = 1)
+        player_type_players_df.rename({'position': 'Position', 'org': 'Current Organization', 'team': 'Team', 'level': 'Level'}, axis = 1, inplace = True)
+        player_type_players_df = player_type_players_df[['Player', 'Position', 'Hometown', 'Current Organization', 'Team', 'Level'] + list(cbn_utils.stats_labels['batting' if player_type == 'Hitters' else 'pitching'].keys())]
+        data += [['']] + [[player_type]] + [player_type_players_df.columns.tolist()] + player_type_players_df.values.tolist()
+    player_ids = set(player_ids)
+    data = [[f'{len(player_ids)} Players']] + data
+
+    try:
+        minors_worksheet = hub_spreadsheet.worksheet('Canadians in the Minors')
+        hub_spreadsheet.del_worksheet(minors_worksheet)
+    except:
+        pass
+    minors_worksheet = hub_spreadsheet.add_worksheet('Canadians in the Minors', rows = 1, cols = 1)
+    minors_worksheet.insert_rows(data)
+
+    # Formatting
+    minors_worksheet.columns_auto_resize(start_column_index = 0, end_column_index = 5) # Resize column
+    requests = [{
+        'updateDimensionProperties': {
+            'range': {
+                'sheetId': minors_worksheet._properties['sheetId'],
+                'dimension': 'COLUMNS',
+                'startIndex': 6,
+                'endIndex': 19
+            },
+            'properties': {
+                'pixelSize': 50
+            },
+            'fields': 'pixelSize'
+        }
+    }]
+
+    for header in minors_worksheet.findall(re.compile(r'Players|Hitters|Pitchers')):
+        # Position group
+        range_ = {
+            'sheetId': minors_worksheet._properties['sheetId'],
+            'startColumnIndex': 0,
+            'endColumnIndex': 1,
+            'startRowIndex': header.row - 1,
+            'endRowIndex': header.row
+        }
+        requests.append({
+            'repeatCell': {
+                'range': range_.copy(),
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': {
+                            'red': 0.92,
+                            'green': 0.92,
+                            'blue': 0.92
+                        },
+                        'textFormat': {
+                            'fontSize': 16,
+                            'bold': True
+                        }
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat)',
+            }
+        })
+
+        # Stats column headers
+        range_['startRowIndex'] += 1
+        range_['endRowIndex'] += 1
+        range_['endColumnIndex'] = 19
+        requests.append({
+            'repeatCell': {
+                'range': range_.copy(),
+                'cell': {
+                    'userEnteredFormat': {
+                        'textFormat': {
+                            'bold': True
+                        }
+                    }
+                },
+                'fields': 'userEnteredFormat(textFormat)',
+            }
+        })
+
+        # Center cells
+        requests.append({
+            'repeatCell': {
+                'range': {
+                    'sheetId': minors_worksheet._properties['sheetId'],
+                    'startColumnIndex': 6,
+                    'endColumnIndex': 19,
+                    'startRowIndex': 1,
+                    'endRowIndex': len(data) + 1
+                },
+                'cell': {
+                    'userEnteredFormat': {
+                        'horizontalAlignment': 'CENTER',
+                        'verticalAlignment': 'MIDDLE'
+                    }
+                },
+                'fields': 'userEnteredFormat(horizontalAlignment,verticalAlignment)',
+            }
+        })
+
+    hub_spreadsheet.batch_update({
+        'requests': requests
+    })
+
+    # Copy sheet from Hub to Shared sheet
+    year_spreadsheet = google_spreadsheet.spreadsheet(name = f'{config["YEAR"]} Canadians in the Minors')
+    year_worksheet = year_spreadsheet.get_worksheet(0)
+    copy_and_paste_sheet(year_spreadsheet, minors_worksheet, year_worksheet)
+
 # if __name__ == '__main__':
 #     update_canadians_sheet()
 #     update_stats_sheet()
 #     create_ballot_sheet()
+#     update_minors_sheet()

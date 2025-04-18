@@ -3,7 +3,7 @@ import cbn_utils
 from model import School, Player, StatsPage, SchedulePage, BoxScore
 from bs4 import BeautifulSoup
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import re
 import json
@@ -344,7 +344,6 @@ def positions():
 def minors():
     players_worksheet = google_sheets.hub_spreadsheet.worksheet('Players (Minors)')
     players_df = google_sheets.df(players_worksheet)
-    players_df['row'] = players_df.index.to_series() + 2
 
     def province(abbreviation):
         return {
@@ -387,7 +386,8 @@ def minors():
                     'city': player['birthCity'],
                     'province': province(player['birthStateProvince']),
                     'level': level['abbreviation'],
-                    'org': teams_dict[player['currentTeam']['id']]
+                    'org': teams_dict[player['currentTeam']['id']],
+
                 }
             ])
             scraped_players_df = pd.concat([scraped_players_df, scraped_player], ignore_index = True).drop_duplicates(subset = 'mlbam_id', ignore_index = True)
@@ -408,17 +408,25 @@ def minors():
         'org': 'last'
     }).reset_index()
     updated_players_df['added'] = updated_players_df['added'].fillna(today_str)
+    updated_players_df['last_confirmed'] = today_str
+    updated_players_df.sort_values(['last_name', 'first_name'], ascending = [True, True], ignore_index = True, inplace = True)
+    updated_players_df.fillna('', inplace = True)
+    if len(players_df.index) > 0:
+        cbn_utils.pause(players_worksheet.delete_rows(2, len(players_df.index) + 1))
+    cbn_utils.pause(players_worksheet.append_rows(updated_players_df.values.tolist()))
 
-    # Stats
-    year = datetime.now().year
+    # Season Stats
+    cbn_utils.log('Take 2 minutes to look up any missing baseball reference links')
+    time.sleep(120)
+    updated_players_df = google_sheets.df(players_worksheet).iloc[:, :11]
     stats_df = pd.DataFrame()
     for i, player_series in updated_players_df.iterrows():
-        if player_series['bbref'] == '': continue
+        if (player_series['bbref'] == '') | (player_series['bbref'] == None): continue
         bbref_player_req = cbn_utils.get(player_series['bbref'])
         dfs = pd.read_html(bbref_player_req.text)
         for df in dfs:
             if 'Year' not in df.columns: continue
-            year_df = df[df['Year'].str.contains(str(year)).fillna(False) & ~df['Lev'].isin(['Maj'])]
+            year_df = df[df['Year'].str.contains(str(google_sheets.config['Year'])).fillna(False) & ~df['Lev'].isin(['Maj'])]
             if len(year_df.index) == 0: continue
             year_batting_df = pd.DataFrame(columns = ['Tm', 'Lev', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'AVG', 'OBP', 'SLG', 'OPS'])
             year_pitching_df = pd.DataFrame(columns = ['Tm', 'Lev', 'APP', 'GS', 'IP', 'W', 'L', 'ER', 'HA', 'BB', 'ERA', 'SV', 'K'])
@@ -427,14 +435,19 @@ def minors():
             elif 'SV' in year_df.columns:
                 year_pitching_df = pd.concat([year_pitching_df, year_df.rename({'G': 'APP', 'H': 'HA', 'SO': 'K'}, axis = 1)], ignore_index = True)[year_pitching_df.columns]
             year_combined_df = pd.merge(year_batting_df, year_pitching_df, 'outer', on = ['Tm', 'Lev'])
-            year_combined_df.fillna('', inplace = True)
-            year_combined_df = year_combined_df.astype('str')
+            year_combined_df = year_combined_df[year_batting_df.columns.tolist() + [col for col in year_pitching_df.columns if col not in ['Tm', 'Lev']]]
+            year_combined_df.fillna(0, inplace = True)
+            for col in ['G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'APP', 'GS', 'W', 'L', 'ER', 'HA', 'BB', 'SV', 'K']:
+                year_combined_df[col] = year_combined_df[col].astype('int')
+            for col in ['AVG', 'OBP', 'SLG', 'OPS']:
+                year_combined_df[col] = year_combined_df[col].astype('float').round(3)
+            year_combined_df['ERA'] = year_combined_df['ERA'].astype('float').round(2)
+            year_combined_df['IP'] = year_combined_df['IP'].astype('float').round(1)
             year_combined_df['mlbam_id'] = player_series['mlbam_id']
             stats_df = pd.concat([stats_df, year_combined_df], ignore_index = True)
             updated_players_df.loc[i, 'last_stats_update'] = today_str
-        time.sleep(2)
+        time.sleep(4)
 
-    updated_players_df['last_confirmed'] = today_str
     updated_players_df = pd.merge(updated_players_df, stats_df, 'left', on = 'mlbam_id')
     updated_players_df.rename({'Tm': 'team', 'Lev': 'level'}, axis = 1, inplace = True)
     updated_players_df.sort_values(['last_name', 'first_name', 'level', 'G', 'APP'], ascending = [True, True, False, False, False], ignore_index = True, inplace = True)
@@ -442,6 +455,78 @@ def minors():
     if len(players_df.index) > 0:
         cbn_utils.pause(players_worksheet.delete_rows(2, len(players_df.index) + 1))
     cbn_utils.pause(players_worksheet.append_rows(updated_players_df.values.tolist()))
+
+    google_sheets.update_minors_sheet()
+
+    # Last week stats
+    end_date = datetime.now() - timedelta(days = 1)
+    start_date = end_date - timedelta(days = 5)
+    week_hitting_df = pd.DataFrame()
+    week_pitching_df = pd.DataFrame()
+    players_df = google_sheets.df(players_worksheet).iloc[:, :11].drop_duplicates(ignore_index = True)
+    for i, player_series in players_df.iterrows():
+        if (player_series['bbref'] == '') | (player_series['bbref'] == None): continue
+        for splits_page in ['bgl', 'pgl']:
+            if (player_series['position'] == 'P') & (splits_page == 'bgl'): continue
+            if (player_series['position'] != 'P') & (splits_page == 'pgl'): continue
+            bbref_player_req = cbn_utils.get(f'{player_series["bbref"]}&type={splits_page}&year={google_sheets.config["YEAR"]}')
+            time.sleep(4)
+            soup = BeautifulSoup(bbref_player_req.text, 'html.parser')
+            if soup.find('table') == None: continue
+            dfs = pd.read_html(bbref_player_req.text)
+            for df in dfs:
+                if 'Tm' not in df.columns: continue
+                games_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date) & (df['Lev'] != 'Maj')].copy()
+                if len(games_df.index) == 0: continue
+                if splits_page == 'bgl':
+                    week_df = pd.DataFrame([{
+                        'Player': f'{player_series["first_name"]} {player_series["last_name"]}',
+                        'Position': player_series['position'],
+                        'Current Organization': player_series['org'],
+                        'Team(s)': '\n'.join(set(games_df.apply(lambda row: f'{row["Tm"]} ({row["Lev"].split("-")[0]})', axis = 1).tolist())),
+                        'AB': sum(games_df['AB'].astype('int')),
+                        'R': sum(games_df['R'].astype('int')),
+                        'H': sum(games_df['H'].astype('int')),
+                        '2B': sum(games_df['2B'].astype('int')),
+                        '3B': sum(games_df['3B'].astype('int')),
+                        'HR': sum(games_df['HR'].astype('int')),
+                        'RBI': sum(games_df['RBI'].astype('int')),
+                        'SB': sum(games_df['SB'].astype('int')),
+                        'AVG': sum(games_df['H'].astype('int')) / sum(games_df['AB'].astype('int')),
+                        'OBP': (sum(games_df['H'].astype('int')) + sum(games_df['BB'].astype('int'))) / sum(games_df['PA'].astype('int')),
+                        'SLG': sum(games_df['H'].astype('int') + games_df['2B'].astype('int') + 2 * games_df['3B'].astype('int') + 3 * games_df['HR'].astype('int')) / sum(games_df['AB'].astype('int'))
+                    }])
+                    week_df['OPS'] = (week_df['OBP'] + week_df['SLG']).round(3)
+                    week_df['OBP'] = week_df['OBP'].round(3)
+                    week_df['SLG'] = week_df['SLG'].round(3)
+                    week_hitting_df = pd.concat([week_hitting_df, week_df], ignore_index = True)
+                else:
+                    games_df['IP'] = games_df['IP'].astype('float').apply(lambda x: x if x == round(x) else round(x) + 1/3 if (x - 0.1) == round(x) else round(x) + 2/3)
+                    week_df = pd.DataFrame([{
+                        'Player': f'{player_series["first_name"]} {player_series["last_name"]}',
+                        'Position': player_series['position'],
+                        'Current Organization': player_series['org'],
+                        'Team(s)': '\n'.join(set(games_df.apply(lambda row: f'{row["Tm"]} ({row["Lev"].split("-")[0]})', axis = 1).tolist())),
+                        'APP': len(games_df.index),
+                        'IP': sum(games_df['IP']),
+                        'W': sum(games_df['Dec'].astype('str').str.contains('W')),
+                        'L': sum(games_df['Dec'].astype('str').str.contains('L')),
+                        'ER': sum(games_df['ER'].astype('int')),
+                        'HA': sum(games_df['H'].astype('int')),
+                        'BB': sum(games_df['BB'].astype('int')),
+                        'ERA': round(9 * sum(games_df['ER'].astype('int')) / sum(games_df['IP']), 2),
+                        'SV': sum(games_df['Dec'].astype('str').str.contains('S')),
+                        'K': sum(games_df['SO'].astype('int'))
+                    }])
+                    week_df['IP'] = week_df['IP'].apply(lambda x: int(x) if x == round(x) else round(x) + 0.1 if (x - 1/3) == round(x) else round(x) - 0.8).round(1)
+                    week_pitching_df = pd.concat([week_pitching_df, week_df], ignore_index = True)
+
+    week_worksheet = google_sheets.hub_spreadsheet.worksheet('Minors Players of the Week')
+    cbn_utils.pause(week_worksheet.delete_rows(2, len(google_sheets.df(week_worksheet).index) + 1))
+    cbn_utils.pause(week_worksheet.append_rows(
+        [['Hitting']] + [week_hitting_df.columns.tolist()] + week_hitting_df.values.tolist() + [['']] + \
+        [['Pitching']] + [week_pitching_df.columns.tolist()] + week_pitching_df.values.tolist()
+    ))
 
 def find_school_stats_ids():
     # School sheet
