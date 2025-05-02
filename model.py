@@ -1,5 +1,6 @@
 import cbn_utils
 import requests
+from selenium import webdriver 
 from bs4 import BeautifulSoup, element
 import pandas as pd
 import json
@@ -33,7 +34,9 @@ class WebPage:
         if self.redirected() == True:
             # Redirected
             status += f' {self.__REDIRECT_ICON__} {self.__response__.url}'
-        if not isinstance(self.__response__, requests.Response):
+        if isinstance(self.__response__, webdriver.chrome.webdriver.WebDriver):
+            status += f' {self.__ERROR_ICON__} (WebDriver)'
+        elif not isinstance(self.__response__, requests.Response):
             status += f' {self.__ERROR_ICON__} not fetched'
         elif self.success():
             status += f' {self.__SUCCESS_ICON__}'
@@ -45,8 +48,10 @@ class WebPage:
         return self.__url__
 
     def success(self) -> bool:
-        if self.__response__ != None:
+        if isinstance(self.__response__, requests.Response):
             return self.__response__.status_code == 200
+        elif isinstance(self.__response__, webdriver.chrome.webdriver.WebDriver):
+            return True
 
     def redirected(self) -> bool:
         if self.__response__ != None:
@@ -57,9 +62,19 @@ class WebPage:
             # page has already been fetched
             return self.__html__
         url_split = self.__url__.split('#')
-        self.__response__ = cbn_utils.get(url_split[0])
+
+        if f'{cbn_utils.NCAA_DOMAIN}/players' in self.__url__:
+            cbn_utils.driver.get(self.__url__)
+            cbn_utils.log(f'{url_split[0]} (Selenium)')
+            self.__response__ = cbn_utils.driver
+        else:
+            self.__response__ = cbn_utils.get(url_split[0])
+
         if self.__response__ != None:
-            self.__html__ = self.__response__.text
+            if f'{cbn_utils.NCAA_DOMAIN}/players' in self.__url__:
+                self.__html__ = self.__response__.page_source
+            else:
+                self.__html__ = self.__response__.text
         return self.__html__
 
 class RosterPage(WebPage):

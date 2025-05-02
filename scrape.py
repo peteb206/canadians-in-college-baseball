@@ -276,10 +276,6 @@ def find_player_stat_ids():
         google_sheets.set_sheet_header(players_worksheet, sort_by = ['school_roster_url', 'last_name', 'first_name'])
 
 def stats():
-    # Manual corrections
-    corrections_df = google_sheets.df(google_sheets.hub_spreadsheet.worksheet('Corrections'))
-    corrections = dict(zip(corrections_df['From'], corrections_df['To']))
-
     for sheet_name in ['Players (Manual)', 'Players']:
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
@@ -302,6 +298,7 @@ def stats():
                 cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[today_str, player_row['stats_url']] + stat_values]))
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {player_row["stats_url"]} - {str(e)}')
+    cbn_utils.driver.close()
 
 def positions():
     # Manual corrections
@@ -426,7 +423,7 @@ def minors():
         dfs = pd.read_html(bbref_player_req.text)
         for df in dfs:
             if 'Year' not in df.columns: continue
-            year_df = df[df['Year'].str.contains(str(google_sheets.config['Year'])).fillna(False) & ~df['Lev'].isin(['Maj'])]
+            year_df = df[(df['Year'].str.contains(str(google_sheets.config['YEAR'])) == True) & (df['Lev'].isin(['Maj']) == False) & (df['Tm'].str.contains('Teams') == False)]
             if len(year_df.index) == 0: continue
             year_batting_df = pd.DataFrame(columns = ['Tm', 'Lev', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'AVG', 'OBP', 'SLG', 'OPS'])
             year_pitching_df = pd.DataFrame(columns = ['Tm', 'Lev', 'APP', 'GS', 'IP', 'W', 'L', 'ER', 'HA', 'BB', 'ERA', 'SV', 'K'])
@@ -460,7 +457,8 @@ def minors():
 
     # Last week stats
     end_date = datetime.now() - timedelta(days = 1)
-    start_date = end_date - timedelta(days = 5)
+    start_date = (end_date - timedelta(days = 5)).strftime("%Y-%m-%d")
+    end_date = end_date.strftime("%Y-%m-%d")
     week_hitting_df = pd.DataFrame()
     week_pitching_df = pd.DataFrame()
     players_df = google_sheets.df(players_worksheet).iloc[:, :11].drop_duplicates(ignore_index = True)

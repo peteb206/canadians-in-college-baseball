@@ -1,5 +1,7 @@
 import re
 import requests
+from selenium import webdriver 
+from selenium.webdriver.chrome.options import Options
 import os
 import platform
 import pandas as pd
@@ -23,14 +25,25 @@ def env(key: str):
 
 RUNNING_LOCALLY = False if platform.system() == 'Linux' else True
 
+NCAA_DOMAIN = 'stats.ncaa.org'
+NAIA_DOMAIN = 'naiastats.prestosports.com'
+JUCO_DOMAIN = 'www.njcaa.org'
+CCCAA_DOMAIN = 'www.cccaasports.org'
+NWAC_DOMAIN = 'nwacsports.com'
+USCAA_DOMAIN = 'uscaa.prestosports.com'
+
 # Requests
 session = requests.Session()
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'X-Requested-With': 'XMLHttpRequest'
+}
+chrome_options = Options()
+chrome_options.add_argument('--headless=new')
+chrome_options.add_argument(f'user-agent={headers}')
+driver = webdriver.Chrome(options = chrome_options)
 
 def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-        'X-Requested-With': 'XMLHttpRequest'
-    }
 
     def print_req_result(req: requests.Response):
         if not isinstance(req, requests.Response):
@@ -60,14 +73,6 @@ def get(url: str, timeout: int = 60, verify: bool = True, attempt: int = 0):
     except requests.exceptions.ConnectionError:
         print_req_result(req)
     return req
-
-# Labels
-NCAA_DOMAIN = 'stats.ncaa.org'
-NAIA_DOMAIN = 'naiastats.prestosports.com'
-JUCO_DOMAIN = 'www.njcaa.org'
-CCCAA_DOMAIN = 'www.cccaasports.org'
-NWAC_DOMAIN = 'nwacsports.com'
-USCAA_DOMAIN = 'uscaa.prestosports.com'
 
 leagues = [
     {'league': 'NCAA', 'division': str(division), 'label': f'NCAA: Division {division}'} for division in range(1, 4)

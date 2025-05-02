@@ -685,7 +685,7 @@ def update_minors_sheet():
         player_type_players_df = player_type_players_df[['Player', 'Position', 'Hometown', 'Current Organization', 'Team', 'Level'] + list(cbn_utils.stats_labels['batting' if player_type == 'Hitters' else 'pitching'].keys())]
         data += [['']] + [[player_type]] + [player_type_players_df.columns.tolist()] + player_type_players_df.values.tolist()
     player_ids = set(player_ids)
-    data = [[f'{len(player_ids)} Players']] + data
+    data = [[f'{len(player_ids)} Players'] + [''] * 14 + [f'Last updated: {datetime.now().strftime("%B %d, %Y")}']] + data
 
     try:
         minors_worksheet = hub_spreadsheet.worksheet('Canadians in the Minors')
