@@ -264,12 +264,13 @@ def find_player_stat_ids():
             stats_page = StatsPage(school_stats_url, corrections = corrections)
             if len(stats_page.to_df().index) == 0:
                 continue
-            stats_urls_to_add = pd.merge(
-                players_df[players_df['stats_url_school'] == school_stats_url].drop('stats_url', axis = 1),
-                stats_page.to_df(),
-                how = 'inner',
-                on = ['last_name', 'first_name']
-            )
+            search_players_df = players_df[players_df['stats_url_school'] == school_stats_url].drop('stats_url', axis = 1)
+            print('Looking for a stats url for the following player(s):')
+            print(search_players_df[['last_name', 'first_name']].to_string())
+            print('\nFound the following stats url(s):')
+            print(stats_page.to_df().to_string())
+            print()
+            stats_urls_to_add = pd.merge(search_players_df, stats_page.to_df(), how = 'inner', on = ['last_name', 'first_name'])
             for _, player_row in stats_urls_to_add.iterrows():
                 cbn_utils.pause(players_worksheet.update(f'L{int(player_row["row"])}', player_row['stats_url']))
 
@@ -413,13 +414,16 @@ def minors():
     cbn_utils.pause(players_worksheet.append_rows(updated_players_df.values.tolist()))
 
     # Season Stats
-    cbn_utils.log('Take 2 minutes to look up any missing baseball reference links')
-    time.sleep(120)
+    pages_to_look_up = len(updated_players_df[(updated_players_df['bbref'] == '') | (updated_players_df['bbref'] == None)].index)
+    cbn_utils.log(f'Take {pages_to_look_up / 2} minutes to look up any missing baseball reference links')
+    time.sleep(30 * pages_to_look_up)
     updated_players_df = google_sheets.df(players_worksheet).iloc[:, :11]
     stats_df = pd.DataFrame()
     for i, player_series in updated_players_df.iterrows():
         if (player_series['bbref'] == '') | (player_series['bbref'] == None): continue
         bbref_player_req = cbn_utils.get(player_series['bbref'])
+        if bbref_player_req == None: continue
+        if '<table' not in bbref_player_req.text: continue
         dfs = pd.read_html(bbref_player_req.text)
         for df in dfs:
             if 'Year' not in df.columns: continue
@@ -469,12 +473,13 @@ def minors():
             if (player_series['position'] != 'P') & (splits_page == 'pgl'): continue
             bbref_player_req = cbn_utils.get(f'{player_series["bbref"]}&type={splits_page}&year={google_sheets.config["YEAR"]}')
             time.sleep(4)
+            if bbref_player_req == None: continue
             soup = BeautifulSoup(bbref_player_req.text, 'html.parser')
             if soup.find('table') == None: continue
             dfs = pd.read_html(bbref_player_req.text)
             for df in dfs:
                 if 'Tm' not in df.columns: continue
-                games_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date) & (df['Lev'] != 'Maj')].copy()
+                games_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)].copy()
                 if len(games_df.index) == 0: continue
                 if splits_page == 'bgl':
                     week_df = pd.DataFrame([{
@@ -482,7 +487,7 @@ def minors():
                         'Position': player_series['position'],
                         'Current Organization': player_series['org'],
                         'Team(s)': '\n'.join(set(games_df.apply(lambda row: f'{row["Tm"]} ({row["Lev"].split("-")[0]})', axis = 1).tolist())),
-                        'AB': sum(games_df['AB'].astype('int')),
+                        'PA': sum(games_df['PA'].astype('int')),
                         'R': sum(games_df['R'].astype('int')),
                         'H': sum(games_df['H'].astype('int')),
                         '2B': sum(games_df['2B'].astype('int')),
@@ -490,9 +495,9 @@ def minors():
                         'HR': sum(games_df['HR'].astype('int')),
                         'RBI': sum(games_df['RBI'].astype('int')),
                         'SB': sum(games_df['SB'].astype('int')),
-                        'AVG': sum(games_df['H'].astype('int')) / sum(games_df['AB'].astype('int')),
-                        'OBP': (sum(games_df['H'].astype('int')) + sum(games_df['BB'].astype('int'))) / sum(games_df['PA'].astype('int')),
-                        'SLG': sum(games_df['H'].astype('int') + games_df['2B'].astype('int') + 2 * games_df['3B'].astype('int') + 3 * games_df['HR'].astype('int')) / sum(games_df['AB'].astype('int'))
+                        'AVG': (sum(games_df['H'].astype('int')) / sum(games_df['AB'].astype('int'))) if sum(games_df['AB'].astype('int')) > 0 else 0,
+                        'OBP': ((sum(games_df['H'].astype('int')) + sum(games_df['BB'].astype('int'))) / sum(games_df['PA'].astype('int'))) if sum(games_df['PA'].astype('int')) > 0 else 0,
+                        'SLG': (sum(games_df['H'].astype('int') + games_df['2B'].astype('int') + 2 * games_df['3B'].astype('int') + 3 * games_df['HR'].astype('int')) / sum(games_df['AB'].astype('int'))) if sum(games_df['AB'].astype('int')) > 0 else 0
                     }])
                     week_df['OPS'] = (week_df['OBP'] + week_df['SLG']).round(3)
                     week_df['OBP'] = week_df['OBP'].round(3)
@@ -512,11 +517,12 @@ def minors():
                         'ER': sum(games_df['ER'].astype('int')),
                         'HA': sum(games_df['H'].astype('int')),
                         'BB': sum(games_df['BB'].astype('int')),
-                        'ERA': round(9 * sum(games_df['ER'].astype('int')) / sum(games_df['IP']), 2),
+                        'ERA': (round(9 * sum(games_df['ER'].astype('int')) / sum(games_df['IP']), 2)) if sum(games_df['IP']) > 0 else 99,
+                        'WHIP': (round((sum(games_df['H'].astype('int')) + sum(games_df['BB'].astype('int'))) / sum(games_df['IP']), 2)) if sum(games_df['IP']) > 0 else 99,
                         'SV': sum(games_df['Dec'].astype('str').str.contains('S')),
                         'K': sum(games_df['SO'].astype('int'))
                     }])
-                    week_df['IP'] = week_df['IP'].apply(lambda x: int(x) if x == round(x) else round(x) + 0.1 if (x - 1/3) == round(x) else round(x) - 0.8).round(1)
+                    week_df['IP'] = week_df['IP'].round(1).apply(lambda x: int(x) if x == round(x) else round(x) + 0.1 if '.3' in str(x) else x - 0.5)
                     week_pitching_df = pd.concat([week_pitching_df, week_df], ignore_index = True)
 
     week_worksheet = google_sheets.hub_spreadsheet.worksheet('Minors Players of the Week')
@@ -525,22 +531,6 @@ def minors():
         [['Hitting']] + [week_hitting_df.columns.tolist()] + week_hitting_df.values.tolist() + [['']] + \
         [['Pitching']] + [week_pitching_df.columns.tolist()] + week_pitching_df.values.tolist()
     ))
-
-def find_school_stats_ids():
-    # School sheet
-    schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
-    schools_df = google_sheets.df(schools_worksheet)
-    for i, school_series in schools_df.iterrows():
-        stats_id = ''
-        if school_series['league'] == 'NCAA':
-            school_url = school_series['stats_url'].split('/stats/')[0]
-            school_sports = cbn_utils.get(school_url)
-            soup = BeautifulSoup(school_sports.text, 'html.parser')
-            for a in soup.find_all('a'):
-                if 'Baseball' in a.text:
-                    stats_id = a['href'].split('/')[-1]
-        if stats_id != '':
-            cbn_utils.pause(schools_worksheet.update(f'F{i + 2}', stats_id))
 
 
 # if __name__ == '__main__':

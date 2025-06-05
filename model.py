@@ -67,6 +67,8 @@ class WebPage:
             cbn_utils.driver.get(self.__url__)
             cbn_utils.log(f'{url_split[0]} (Selenium)')
             self.__response__ = cbn_utils.driver
+        elif (cbn_utils.CCCAA_DOMAIN in self.__url__) & ('/players/' in self.__url__):
+            self.__response__ = cbn_utils.get(f'{url_split[0]}?serverSide')
         else:
             self.__response__ = cbn_utils.get(url_split[0])
 
@@ -641,12 +643,14 @@ class StatsPage(WebPage):
             hitting_df = hitting_df[hitting_cols]
             hitting_df.replace('-', 0, inplace = True)
             hitting_df['ops'] = hitting_df['obp'].astype(float) + hitting_df['slg'].astype(float)
+            hitting_df.reset_index(drop = True, inplace = True)
 
             pitching_df = pitching_df[pitching_cols]
             pitching_df.replace('-', 0, inplace = True)
             pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'].astype(float) - pitching_df['h'].astype(int)
             pitching_df.rename({'whip': 'bb'}, axis = 1, inplace = True)
             pitching_df['bb'] = pitching_df['bb'].round()
+            pitching_df.reset_index(drop = True, inplace = True)
 
             self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
             self.__df__.columns = df_columns   
