@@ -292,7 +292,7 @@ def stats():
                 stats_url = player_row['stats_url']
             )
             try:
-                success = player.add_stats(google_sheets.config['ACADEMIC_YEAR'])
+                success = player.add_stats(google_sheets.config['YEAR_SHORT'])
                 if success == False:
                     continue
                 stat_values = list(player.to_dict().values())[13:]
