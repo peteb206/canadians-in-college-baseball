@@ -508,14 +508,14 @@ class RosterPage(WebPage):
         return city, province 
 
 class StatsPage(WebPage):
-    def __init__(self, url = '', academic_year = '', corrections: dict[str, str] = dict()):
+    def __init__(self, url = '', year = '', corrections: dict[str, str] = dict()):
         WebPage.__init__(self, url)
         self.__df__: pd.DataFrame = None
         self.__corrections__ = corrections
         if url.endswith('roster') | url.endswith('lineup'):
             self.__fetch_stat_ids__()
         elif url != '':
-            self.__fetch_stats__(academic_year)
+            self.__fetch_stats__(year)
 
     def to_df(self):
         return self.__df__
@@ -555,7 +555,7 @@ class StatsPage(WebPage):
         self.__df__ = pd.DataFrame(player_links).drop_duplicates(ignore_index = True)
         return self.__df__
 
-    def __fetch_stats__(self, academic_year):
+    def __fetch_stats__(self, year):
         url, html = self.url(), self.html()
         if self.success() == False:
             return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
@@ -572,10 +572,10 @@ class StatsPage(WebPage):
                     if 'Year' not in df.columns:
                         continue
                     if 'ERA' in df.columns:
-                        pitching_df = df[df['Year'] == academic_year]
+                        pitching_df = df[df['Year'].str.endswith(year)]
                         pitching_df = pitching_df[pitching_cols]
                     else:
-                        hitting_df = df[df['Year'] == academic_year]
+                        hitting_df = df[df['Year'].str.endswith(year)]
                         hitting_df = hitting_df[hitting_cols]
                 if tab == 'other':
                     for a in soup.find_all('a'):
@@ -631,14 +631,14 @@ class StatsPage(WebPage):
                     continue
                 if 'gp' in df.columns:
                     if len(hitting_df.index) == 0:
-                        hitting_df = df[df['Unnamed: 0'] == academic_year]
+                        hitting_df = df[df['Unnamed: 0'].str.endswith(year)]
                     else:
-                        hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'] == academic_year], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+                        hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'].str.endswith(year)], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
                 elif (len(df.index) <= 6) & (('app' in df.columns) | ('er' in df.columns)):
                     if len(pitching_df.index) == 0:
-                        pitching_df = df[df['Unnamed: 0'] == academic_year]
+                        pitching_df = df[df['Unnamed: 0'].str.endswith(year)]
                     else:
-                        pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'] == academic_year], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+                        pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'].str.endswith(year)], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
 
             hitting_df = hitting_df[hitting_cols]
             hitting_df.replace('-', 0, inplace = True)
