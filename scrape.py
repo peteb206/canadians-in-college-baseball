@@ -1,6 +1,6 @@
 import google_sheets
 import cbn_utils
-from model import School, Player, StatsPage, SchedulePage, BoxScore
+from model import School, Player, WebPage, StatsPage, SchedulePage, BoxScore
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime, timedelta
@@ -144,6 +144,21 @@ def schools():
     get_cccaa_schools()
     get_nwac_schools()
     get_uscaa_schools()
+
+def find_ncaa_school_stat_ids():
+    schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
+    schools_df = google_sheets.df(schools_worksheet)
+
+    for i, school_series in schools_df.iterrows():
+        if (school_series['league'] != 'NCAA'): continue
+        if (school_series['stats_id'] != ''): continue
+        school_history_page = WebPage(f'https://{cbn_utils.NCAA_DOMAIN}/teams/history/MBA/{school_series["id"]}')
+        soup = BeautifulSoup(school_history_page.html(), 'html.parser')
+        table = soup.find('table')
+        a = table.find('a')
+        if a.text == google_sheets.config['ACADEMIC_YEAR']:
+            school_stats_id = a['href'].split('/')[-1]
+            cbn_utils.pause(schools_worksheet.update(f'F{i + 2}', school_stats_id))
 
 def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -540,9 +555,9 @@ def minors():
 
 # if __name__ == '__main__':
 #     schools()
+#     find_ncaa_school_stat_ids()
 #     players()
 #     stats()
 #     positions()
-#     transition_ncaa_ids()
 #     find_player_stat_ids()
 #     minors()
