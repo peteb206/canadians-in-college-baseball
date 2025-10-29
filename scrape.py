@@ -76,7 +76,7 @@ def schools():
         url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/div{division}/teams'
         if division not in [1, 2, 3]:
             url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams?dec=printer-decorator'
-        html = cbn_utils.get(url).text
+        html = WebPage(url).html()
         soup = BeautifulSoup(html, 'html.parser')
         schools = list()
         schools_table = soup.find('table')
@@ -103,7 +103,7 @@ def schools():
         return get_other_schools('NAIA')
 
     def get_juco_schools():
-        html = cbn_utils.get('https://njcaastats.prestosports.com/sports/bsb/teams-page').text
+        html = WebPage('https://njcaastats.prestosports.com/sports/bsb/teams-page').html()
         soup = BeautifulSoup(html, 'html.parser')
         school_tables = soup.find_all('table')
         if school_tables == None:
@@ -156,6 +156,7 @@ def find_ncaa_school_stat_ids():
         soup = BeautifulSoup(school_history_page.html(), 'html.parser')
         table = soup.find('table')
         a = table.find('a')
+        if a == None: continue
         if a.text == google_sheets.config['ACADEMIC_YEAR']:
             school_stats_id = a['href'].split('/')[-1]
             cbn_utils.pause(schools_worksheet.update(f'F{i + 2}', school_stats_id))
@@ -444,10 +445,9 @@ def minors():
     for i, player_series in updated_players_df.iterrows():
         time.sleep(4)
         if (player_series['bbref'] == '') | (player_series['bbref'] == None): continue
-        bbref_player_req = cbn_utils.get(player_series['bbref'])
-        if bbref_player_req == None: continue
-        if '<table' not in bbref_player_req.text: continue
-        dfs = pd.read_html(bbref_player_req.text)
+        bbref_player_page = WebPage(player_series['bbref'])
+        if '<table' not in bbref_player_page.html(): continue
+        dfs = pd.read_html(bbref_player_page.html())
         for df in dfs:
             if 'Year' not in df.columns: continue
             year_df = df[(df['Year'].str.contains(str(google_sheets.config['YEAR'])) == True) & (df['Lev'].isin(['Maj', 'NCAA', 'NAIA', 'Smr']) == False)]
@@ -491,12 +491,12 @@ def minors():
         for splits_page in ['bgl', 'pgl']:
             if (player_series['position'] == 'P') & (splits_page == 'bgl'): continue
             if (player_series['position'] != 'P') & (splits_page == 'pgl'): continue
-            bbref_player_req = cbn_utils.get(f'{player_series["bbref"]}&type={splits_page}&year={google_sheets.config["YEAR"]}')
+            bbref_player_page = WebPage(f'{player_series["bbref"]}&type={splits_page}&year={google_sheets.config["YEAR"]}')
             time.sleep(4)
-            if bbref_player_req == None: continue
-            soup = BeautifulSoup(bbref_player_req.text, 'html.parser')
+            if bbref_player_page == None: continue
+            soup = BeautifulSoup(bbref_player_page.html(), 'html.parser')
             if soup.find('table') == None: continue
-            dfs = pd.read_html(bbref_player_req.text)
+            dfs = pd.read_html(bbref_player_page.html())
             for df in dfs:
                 if 'Tm' not in df.columns: continue
                 games_df = df[df['Date'].str.contains('|'.join(week_dates), na = False) & (df['Lev'].isin(['Maj', 'NCAA', 'NAIA', 'Smr']) == False)].copy()
