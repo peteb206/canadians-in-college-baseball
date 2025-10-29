@@ -20,27 +20,46 @@ def schools():
     school_cols = ['id', 'name', 'league', 'division', 'state']
     old_schools_df = google_sheets.df(schools_worksheet)[school_cols]
 
-    def compare_and_join(df: pd.DataFrame) -> pd.DataFrame:
-        df['name'] = df['name'].apply(lambda x: x.split('(')[0].strip())
-        df = df.merge(
-            old_schools_df,
-            how = 'left',
-            on = ['league', 'id'],
-            suffixes = ['', '_old']
-        )
-        return df[school_cols].fillna('')
+    def compare(league: str, df: pd.DataFrame):
+        if len(df.index) == 0:
+            cbn_utils.log(f'Failed to scrape {league} schools')
+            cbn_utils.log('')
+        else:
+            # Compare existing and new data
+            compare_df = pd.merge(
+                old_schools_df[old_schools_df['league'] == league],
+                df[[col for col in old_schools_df.columns if col in df.columns]],
+                how = 'outer',
+                indicator = 'source'
+            ).fillna('')
 
-    def get_ncaa_schools() -> pd.DataFrame:
+            # Drop rows not found in new data
+            rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][old_schools_df.columns].reset_index(drop = True)
+            cbn_utils.log('')
+            cbn_utils.log(f'{len(rows_to_delete_df.index)} {league} Schools to Delete:')
+            if len(rows_to_delete_df.index) > 0:
+                cbn_utils.log(f'\n{rows_to_delete_df.to_string()}')
+
+            # Add rows not found in existing data
+            rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][old_schools_df.columns].reset_index(drop = True)
+            cbn_utils.log('')
+            cbn_utils.log(f'{len(rows_to_add_df.index)} {league} Schools to Add:')
+            if len(rows_to_add_df.index) > 0:
+                cbn_utils.log(f'\n{rows_to_add_df.to_string()}')
+            cbn_utils.log('')
+
+    def get_ncaa_schools() :
         df = pd.read_json(cbn_utils.get('https://web3.ncaa.org/directory/api/directory/memberList?type=12&sportCode=MBA').text)
         df = df[['orgId', 'nameOfficial', 'division', 'athleticWebUrl', 'memberOrgAddress']]
-        df['name'] = df['nameOfficial']
+        df['name'] = df['nameOfficial'].apply(lambda x: x.split(' (')[0].strip()) # no parentheses, please
+        df['name'] = df['name'].apply(lambda x: re.sub(r'\s-\s[A-Z]{2}$', '', x))
         df['league'] = 'NCAA'
         df['id'] = df['orgId'].astype(str)
         df['division'] = df['division'].astype(str)
         df['state'] = df['memberOrgAddress'].apply(lambda x: x['state'])
-        return compare_and_join(df.sort_values(by = ['division', 'name'], ignore_index = True))
+        compare('NCAA', df.sort_values(by = ['division', 'name'], ignore_index = True))
 
-    def get_other_schools(league: str, division: int = 0) -> pd.DataFrame:
+    def get_other_schools(league: str, division: int = 0):
         domain = ''
         if league == 'NAIA':
             domain = cbn_utils.NAIA_DOMAIN
@@ -56,87 +75,75 @@ def schools():
             return pd.DataFrame()
         url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/div{division}/teams'
         if division not in [1, 2, 3]:
-            url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams'
-            if league == 'NAIA':
-                url = f'{url}?dec=printer-decorator'
+            url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams?dec=printer-decorator'
         html = cbn_utils.get(url).text
         soup = BeautifulSoup(html, 'html.parser')
         schools = list()
         schools_table = soup.find('table')
-        if schools_table == None:
-            return pd.DataFrame()
-        for i, tr in enumerate(schools_table.find_all('tr')):
-            if i > 0: # skip header row
-                td = tr.find_all('td')[1]
-                a = td.find('a')
-                name = (td.text if a == None else a.text).strip()
-                url_split = [] if a == None else a['href'].split('/')
-                schools.append({
-                    'id': name.lower().replace(' ', '') if len(url_split) == 0 else url_split[-1],
-                    'name': name,
-                    'league': league,
-                    'division': str(division) if division in [1, 2, 3] else ''
-                })
-        return compare_and_join(pd.DataFrame(schools))
+        if schools_table != None:
+            for i, tr in enumerate(schools_table.find_all('tr')):
+                if i > 0: # skip header row
+                    td = tr.find_all('td')[1]
+                    a = td.find('a')
+                    name = (td.text if a == None else a.text).split(' (')[0].strip()
 
-    def get_naia_schools() -> pd.DataFrame:
+                    # Remove " - XX" from school names, if applicable
+                    name = re.sub(r'\s-\s[A-Z]{2}$', '', name)
+
+                    url_split = [] if a == None else a['href'].split('/')
+                    schools.append({
+                        'id': name.lower().replace(' ', '') if len(url_split) == 0 else url_split[-1],
+                        'name': name,
+                        'league': league,
+                        'division': str(division) if division in [1, 2, 3] else ''
+                    })
+        return compare(league, pd.DataFrame(schools))
+
+    def get_naia_schools():
         return get_other_schools('NAIA')
 
-    def get_juco_schools() -> pd.DataFrame:
-        schools_df = pd.concat(
-            [
-                get_other_schools('JUCO', division = 1),
-                get_other_schools('JUCO', division = 2),
-                get_other_schools('JUCO', division = 3)
-            ],
-            ignore_index = True
-        )
-        return schools_df
+    def get_juco_schools():
+        html = cbn_utils.get('https://njcaastats.prestosports.com/sports/bsb/teams-page').text
+        soup = BeautifulSoup(html, 'html.parser')
+        school_tables = soup.find_all('table')
+        if school_tables == None:
+            return pd.DataFrame()
 
-    def get_cccaa_schools() -> pd.DataFrame:
+        schools = list()
+        for i, school_table in enumerate(school_tables):
+            for tr in school_table.find('tbody').find_all('tr'):
+                td = tr.find_all('td')[1]
+                a = td.find('a')
+                name = a.find_all('span')[1].text.split(' (')[0].split(' (')[0].strip()
+
+                # Remove " - XX" from school names, if applicable
+                name = re.sub(r'\s-\s[A-Z]{2}$', '', name)
+
+                url_split1 = a['href'].split('/')
+                url_split2 = url_split1[-1].split('?')[0]
+                schools.append({
+                    'id': url_split2,
+                    'name': name,
+                    'league': 'JUCO',
+                    'division': str(i + 1)
+                })
+        return compare('JUCO', pd.DataFrame(schools))
+
+    def get_cccaa_schools():
         return get_other_schools('CCCAA')
 
-    def get_nwac_schools() -> pd.DataFrame:
+    def get_nwac_schools():
         return get_other_schools('NWAC')
 
-    def get_uscaa_schools() -> pd.DataFrame:
+    def get_uscaa_schools():
         return get_other_schools('USCAA')
 
-    def get_schools() -> pd.DataFrame:
-        # Fetch new schools to dataframe
-        schools_df = pd.concat(
-            [
-                get_ncaa_schools(),
-                get_naia_schools(),
-                get_juco_schools(),
-                get_cccaa_schools(),
-                get_nwac_schools(),
-                get_uscaa_schools()
-            ],
-            ignore_index = True
-        )
-        return schools_df
-
-    schools_df = get_schools()
-
-    # Compare existing and new data
-    existing_df = google_sheets.df(schools_worksheet)[schools_df.columns]
-    compare_df = pd.merge(existing_df, schools_df, how = 'outer', indicator = 'source')
-
-    # Drop rows not found in new data
-    rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][schools_df.columns].reset_index(drop = True)
-    cbn_utils.log('')
-    cbn_utils.log(f'{len(rows_to_delete_df.index)} Schools to Delete:')
-    if len(rows_to_delete_df.index) > 0:
-        cbn_utils.log(rows_to_delete_df.to_string())
-
-    # Add rows not found in existing data
-    rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][schools_df.columns].reset_index(drop = True)
-    cbn_utils.log('')
-    cbn_utils.log(f'{len(rows_to_add_df.index)} Schools to Add:')
-    if len(rows_to_add_df.index) > 0:
-        cbn_utils.log(rows_to_add_df.to_string())
-    cbn_utils.log('')
+    get_ncaa_schools()
+    get_naia_schools()
+    get_juco_schools()
+    get_cccaa_schools()
+    get_nwac_schools()
+    get_uscaa_schools()
 
 def players():
     schools_worksheet = google_sheets.hub_spreadsheet.worksheet('Schools')
@@ -262,13 +269,13 @@ def find_player_stat_ids():
 
         for school_stats_url in players_df['stats_url_school'].unique():
             stats_page = StatsPage(school_stats_url, corrections = corrections)
+            print('Looking for a stats url for the following player(s):')
             if len(stats_page.to_df().index) == 0:
                 continue
             search_players_df = players_df[players_df['stats_url_school'] == school_stats_url].drop('stats_url', axis = 1)
-            print('Looking for a stats url for the following player(s):')
             print(search_players_df[['last_name', 'first_name']].to_string())
             print('\nFound the following stats url(s):')
-            print(stats_page.to_df().to_string())
+            print(stats_page.to_df().sort_values(by = ['last_name', 'first_name'], ignore_index = True).to_string())
             print()
             stats_urls_to_add = pd.merge(search_players_df, stats_page.to_df(), how = 'inner', on = ['last_name', 'first_name'])
             for _, player_row in stats_urls_to_add.iterrows():
@@ -420,6 +427,7 @@ def minors():
     updated_players_df = google_sheets.df(players_worksheet).iloc[:, :11]
     stats_df = pd.DataFrame()
     for i, player_series in updated_players_df.iterrows():
+        time.sleep(4)
         if (player_series['bbref'] == '') | (player_series['bbref'] == None): continue
         bbref_player_req = cbn_utils.get(player_series['bbref'])
         if bbref_player_req == None: continue
@@ -427,7 +435,7 @@ def minors():
         dfs = pd.read_html(bbref_player_req.text)
         for df in dfs:
             if 'Year' not in df.columns: continue
-            year_df = df[(df['Year'].str.contains(str(google_sheets.config['YEAR'])) == True) & (df['Lev'].isin(['Maj']) == False) & (df['Tm'].str.contains('Teams') == False)]
+            year_df = df[(df['Year'].str.contains(str(google_sheets.config['YEAR'])) == True) & (df['Lev'].isin(['Maj', 'NCAA', 'NAIA', 'Smr']) == False)]
             if len(year_df.index) == 0: continue
             year_batting_df = pd.DataFrame(columns = ['Tm', 'Lev', 'G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'AVG', 'OBP', 'SLG', 'OPS'])
             year_pitching_df = pd.DataFrame(columns = ['Tm', 'Lev', 'APP', 'GS', 'IP', 'W', 'L', 'ER', 'HA', 'BB', 'ERA', 'SV', 'K'])
@@ -447,7 +455,6 @@ def minors():
             year_combined_df['mlbam_id'] = player_series['mlbam_id']
             stats_df = pd.concat([stats_df, year_combined_df], ignore_index = True)
             updated_players_df.loc[i, 'last_stats_update'] = today_str
-        time.sleep(4)
 
     updated_players_df = pd.merge(updated_players_df, stats_df, 'left', on = 'mlbam_id')
     updated_players_df.rename({'Tm': 'team', 'Lev': 'level'}, axis = 1, inplace = True)
@@ -460,9 +467,7 @@ def minors():
     google_sheets.update_minors_sheet()
 
     # Last week stats
-    end_date = datetime.now() - timedelta(days = 1)
-    start_date = (end_date - timedelta(days = 5)).strftime("%Y-%m-%d")
-    end_date = end_date.strftime("%Y-%m-%d")
+    week_dates = ([(datetime.now() - timedelta(days = days_back)).strftime("%Y-%m-%d") for days_back in range(1, 7)])[::-1]
     week_hitting_df = pd.DataFrame()
     week_pitching_df = pd.DataFrame()
     players_df = google_sheets.df(players_worksheet).iloc[:, :11].drop_duplicates(ignore_index = True)
@@ -479,7 +484,7 @@ def minors():
             dfs = pd.read_html(bbref_player_req.text)
             for df in dfs:
                 if 'Tm' not in df.columns: continue
-                games_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)].copy()
+                games_df = df[df['Date'].str.contains('|'.join(week_dates), na = False) & (df['Lev'].isin(['Maj', 'NCAA', 'NAIA', 'Smr']) == False)].copy()
                 if len(games_df.index) == 0: continue
                 if splits_page == 'bgl':
                     week_df = pd.DataFrame([{
@@ -537,6 +542,7 @@ def minors():
 #     schools()
 #     players()
 #     stats()
-#     minors()
+#     positions()
 #     transition_ncaa_ids()
 #     find_player_stat_ids()
+#     minors()

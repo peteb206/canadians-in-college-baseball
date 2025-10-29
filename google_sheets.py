@@ -90,6 +90,7 @@ def update_canadians_sheet():
     players_df.sort_values(by = ['last_name', 'first_name'], ignore_index = True, inplace = True)
     players_df['Name'] = players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
     players_df['Hometown'] = players_df.apply(lambda row: f'{row["city"]}, {row["province"]}' if (row['city'] != '') & (row['province'] != '') else row['city'] if row['city'] != '' else row['province'], axis = 1)
+    players_df['Position'] = players_df.apply(lambda row: row['Position'].replace('P', f'{row["throws"]}HP'), axis = 1)
 
     # initialize summary data
     now = datetime.now()
@@ -788,8 +789,43 @@ def update_minors_sheet():
     year_worksheet = year_spreadsheet.get_worksheet(0)
     copy_and_paste_sheet(year_spreadsheet, minors_worksheet, year_worksheet)
 
+def create_temp_ballot_sheet():
+    players_worksheet = hub_spreadsheet.worksheet('Players')
+    players_manual_spreadsheet = hub_spreadsheet.worksheet('Players (Manual)')
+    schools_worksheet = hub_spreadsheet.worksheet('Schools')
+    players_df = pd.merge(
+        pd.concat([df(players_worksheet), df(players_manual_spreadsheet)]),
+        df(schools_worksheet), how = 'inner', left_on = 'school_roster_url', right_on = 'roster_url'
+    ) \
+        .drop_duplicates(subset = ['last_name', 'first_name', 'roster_url']) \
+        .sort_values(by = ['last_name', 'first_name'], ignore_index = True) \
+        .rename({'name': 'School'}, axis = 1)
+    players_df['Name'] = players_df.apply(lambda row: f'{row["first_name"]} {row["last_name"]}', axis = 1)
+
+    pitchers_df = players_df[((players_df['IP'].replace('', 0).astype('float') >= 40) & (players_df['ERA'].replace('', 0).astype('float') <= 4.5)) | (players_df['SV'].replace('', 0).astype('int') >= 5)].copy()
+    hitters_df = players_df[((players_df['AB'].replace('', 0).astype('int') >= 100) & (players_df['AVG'].replace('', 0).astype('float') >= 0.28)) | (players_df['HR'].replace('', 0).astype('int') >= 8)].copy()
+    pitcher_cols = ['Name', 'School'] + list(cbn_utils.stats_labels['pitching'].keys())
+    hitter_cols = ['Name', 'School'] + list(cbn_utils.stats_labels['batting'].keys())
+
+    data = [
+        ['Hitters'],
+        hitter_cols
+    ]
+    data += hitters_df[hitter_cols].values.tolist()
+    data += [
+        [''],
+        ['Pitchers'],
+        pitcher_cols
+    ]
+    data += pitchers_df[pitcher_cols].values.tolist()
+    data += [['']]
+
+    ballot_worksheet = hub_spreadsheet.worksheet('Ballot')
+    ballot_worksheet.insert_rows(data)
+
 # if __name__ == '__main__':
 #     update_canadians_sheet()
 #     update_stats_sheet()
 #     create_ballot_sheet()
+#     create_temp_ballot_sheet()
 #     update_minors_sheet()

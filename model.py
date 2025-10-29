@@ -63,7 +63,7 @@ class WebPage:
             return self.__html__
         url_split = self.__url__.split('#')
 
-        if f'{cbn_utils.NCAA_DOMAIN}/players' in self.__url__:
+        if cbn_utils.NCAA_DOMAIN in self.__url__:
             cbn_utils.driver.get(self.__url__)
             cbn_utils.log(f'{url_split[0]} (Selenium)')
             self.__response__ = cbn_utils.driver
@@ -73,7 +73,7 @@ class WebPage:
             self.__response__ = cbn_utils.get(url_split[0])
 
         if self.__response__ != None:
-            if f'{cbn_utils.NCAA_DOMAIN}/players' in self.__url__:
+            if cbn_utils.NCAA_DOMAIN in self.__url__:
                 self.__html__ = self.__response__.page_source
             else:
                 self.__html__ = self.__response__.text
@@ -194,6 +194,7 @@ class RosterPage(WebPage):
                 a = name_div.find('a')
                 if a:
                     first_name, last_name = self.format_player_name(cbn_utils.replace(a.text, self.__corrections__))
+            if last_name == '': continue # No way this is a player
             details_div = person_div.find('div', {'class': 's-person-details__bio-stats'})
             if details_div:
                 for i, span in enumerate(details_div.find_all('span', {'class': 's-person-details__bio-stats-item'})):
@@ -421,6 +422,14 @@ class RosterPage(WebPage):
             name_string = ' '.join([name_part[0].upper() + name_part[1:].lower() for name_part in name_string.split()])
         full_name_string =  ' '.join(name_string.split(',')[::-1]).strip() # Format as "First Last"
         full_name_string = re.sub(r'\s*\d+', '', full_name_string) # Remove digits, e.g. First Last 0
+
+        # Account for tables that have name as First Last First Last
+        half_length = int(len(full_name_string) / 2)
+        if half_length % 2 == 1:
+            half_length = half_length - 1
+        if full_name_string[:half_length].strip() == full_name_string[half_length:].strip():
+            full_name_string = full_name_string[:half_length].strip() 
+
         full_name_string_split = full_name_string.split(None, 1)
         if len(full_name_string_split) == 2:
             first_name, last_name = full_name_string_split
@@ -532,6 +541,7 @@ class StatsPage(WebPage):
                 if 'data-url' in div.attrs:
                     data_url = f'{url_parts.scheme}://{url_parts.netloc}{div["data-url"]}'
                     if ('&pos=h&r=0&' in data_url) | ('&pos=p&r=0&' in data_url):
+                        data_url = data_url.replace('sort=avg', 'sort=gp').replace('sort=era', 'sort=pgp')
                         players_page = cbn_utils.get(data_url)
                         if players_page != None:
                             soup2 = BeautifulSoup(players_page.text, 'html.parser')
@@ -837,7 +847,7 @@ class Player:
         }
 
     def add_stats(self, academic_year) -> bool:
-        stats_page = StatsPage(url = self.stats_url, academic_year = academic_year)
+        stats_page = StatsPage(url = self.stats_url, year = academic_year)
         stats_df = stats_page.to_df()
         if not isinstance(stats_df, pd.DataFrame):
             return False
