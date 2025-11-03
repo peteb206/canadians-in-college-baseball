@@ -36,6 +36,7 @@ USCAA_DOMAIN = 'uscaa.prestosports.com'
 session = requests.Session()
 headers = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     'X-Requested-With': 'XMLHttpRequest'
 }
 chrome_options = Options()
