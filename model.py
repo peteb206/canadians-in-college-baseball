@@ -22,62 +22,59 @@ class WebPage:
 
         # Instance variables
         self.__url__ = url
-        self.__redirect__ = False
-        self.__response__: requests.Response = None
+        self.__driver__ = None
         self.__html__ = ''
+        self.__success__ = False
+        self.__error_message__ = ''
+
+        self.html()
 
     def __repr__(self):
         return self.__url__ + self.status()
 
     def status(self):
         status = ''
-        if self.redirected() == True:
-            # Redirected
-            status += f' {self.__REDIRECT_ICON__} {self.__response__.url}'
-        if isinstance(self.__response__, webdriver.chrome.webdriver.WebDriver):
-            status += f' {self.__ERROR_ICON__} (WebDriver)'
-        elif not isinstance(self.__response__, requests.Response):
-            status += f' {self.__ERROR_ICON__} not fetched'
+        if self.redirected_to() != None:
+            status += f' {self.__REDIRECT_ICON__} {self.redirected_to()}'
         elif self.success():
             status += f' {self.__SUCCESS_ICON__}'
         else:
-            status += f' {self.__ERROR_ICON__} {self.__response__.reason} ({self.__response__.status_code})'
+            status += f' {self.__ERROR_ICON__} {self.__error_message__}'
         return status
 
     def url(self) -> str:
         return self.__url__
 
     def success(self) -> bool:
-        if isinstance(self.__response__, requests.Response):
-            return self.__response__.status_code == 200
-        elif isinstance(self.__response__, webdriver.chrome.webdriver.WebDriver):
-            return True
+        return self.__success__
 
-    def redirected(self) -> bool:
-        if self.__response__ != None:
-            return (len(self.__response__.history) > 0) & (self.__response__.url != self.__url__)
+    def redirected_to(self):
+        if self.__driver__.current_url != self.__url__:
+            return self.__driver__.current_url
 
     def html(self) -> str:
         if self.__html__ != '':
             # page has already been fetched
             return self.__html__
+
         url_split = self.__url__.split('#')
+        self.__driver__ = cbn_utils.get(url_split[0])
+        self.__html__ = self.__driver__.page_source
 
-        if cbn_utils.NCAA_DOMAIN in self.__url__:
-            cbn_utils.driver.get(self.__url__)
-            cbn_utils.log(f'{url_split[0]} (Selenium)')
-            self.__response__ = cbn_utils.driver
-        elif (cbn_utils.CCCAA_DOMAIN in self.__url__) & ('/players/' in self.__url__):
-            self.__response__ = cbn_utils.get(f'{url_split[0]}?serverSide')
-        else:
-            self.__response__ = cbn_utils.get(url_split[0])
+        for log_entry in self.__driver__.get_log('performance'):
+            message = json.loads(log_entry['message'])['message']
+            if message['method'] == 'Network.responseReceived':
+                response = message['params']['response']
+                if self.__driver__.current_url == response['url']:
+                    status_code = response['status']
+                    self.__success__ = (200 <= status_code < 300)
+                    if not self.__success__:
+                        self.__error_message__ = status_code
 
-        if self.__response__ != None:
-            if cbn_utils.NCAA_DOMAIN in self.__url__:
-                self.__html__ = self.__response__.page_source
-            else:
-                self.__html__ = self.__response__.text
         return self.__html__
+
+    def driver(self):
+        return self.__driver__
 
 class RosterPage(WebPage):
     def __init__(self, url = '', corrections: dict[str, str] = dict()):
@@ -532,7 +529,7 @@ class StatsPage(WebPage):
     def __fetch_stat_ids__(self):
         url, html = self.url(), self.html()
         url_parts = urlparse(url)
-        if self.success() == False:
+        if not self.success():
             return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
         soup = BeautifulSoup(html, 'html.parser')
         player_links = list()
@@ -542,17 +539,16 @@ class StatsPage(WebPage):
                     data_url = f'{url_parts.scheme}://{url_parts.netloc}{div["data-url"]}'
                     if ('&pos=h&r=0&' in data_url) | ('&pos=p&r=0&' in data_url):
                         data_url = data_url.replace('sort=avg', 'sort=gp').replace('sort=era', 'sort=pgp')
-                        players_page = cbn_utils.get(data_url)
-                        if players_page != None:
-                            soup2 = BeautifulSoup(players_page.text, 'html.parser')
-                            for a in soup2.find_all('a'):
-                                if '/players/' in a['href']:
-                                    player = a.text
-                                    for correct_from, correct_to in self.__corrections__.items():
-                                        player = player.replace(correct_from, correct_to)
-                                    last_name = RosterPage.format_player_name(player)[1]
-                                    first_name = RosterPage.format_player_name(player)[0]
-                                    player_links.append({'last_name': last_name, 'first_name': first_name, 'stats_url': f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}'})
+                        players_page = WebPage(data_url)
+                        soup2 = BeautifulSoup(players_page.html(), 'html.parser')
+                        for a in soup2.find_all('a'):
+                            if '/players/' in a['href']:
+                                player = a.text
+                                for correct_from, correct_to in self.__corrections__.items():
+                                    player = player.replace(correct_from, correct_to)
+                                last_name = RosterPage.format_player_name(player)[1]
+                                first_name = RosterPage.format_player_name(player)[0]
+                                player_links.append({'last_name': last_name, 'first_name': first_name, 'stats_url': f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}'})
         else:
             for a in soup.find_all('a'):
                 if '/players/' in a['href']:
@@ -563,11 +559,10 @@ class StatsPage(WebPage):
                     first_name = RosterPage.format_player_name(player)[0]
                     player_links.append({'last_name': last_name, 'first_name': first_name, 'stats_url': f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}'})
         self.__df__ = pd.DataFrame(player_links).drop_duplicates(ignore_index = True)
-        return self.__df__
 
     def __fetch_stats__(self, year):
         url, html = self.url(), self.html()
-        if self.success() == False:
+        if not self.success():
             return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
         df_columns = list(cbn_utils.stats_labels['batting'].keys()) + list(cbn_utils.stats_labels['pitching'].keys())
         hitting_df, pitching_df = pd.DataFrame(), pd.DataFrame()
@@ -664,7 +659,6 @@ class StatsPage(WebPage):
 
             self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
             self.__df__.columns = df_columns   
-        return self.__df__
 
 class SchedulePage(WebPage):
     def __init__(self, url = ''):

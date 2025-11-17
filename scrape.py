@@ -25,6 +25,8 @@ def schools():
             cbn_utils.log(f'Failed to scrape {league} schools')
             cbn_utils.log('')
         else:
+            cbn_utils.log(f'{len(df.index)} {league} schools found currently')
+
             # Compare existing and new data
             compare_df = pd.merge(
                 old_schools_df[old_schools_df['league'] == league],
@@ -36,20 +38,23 @@ def schools():
             # Drop rows not found in new data
             rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][old_schools_df.columns].reset_index(drop = True)
             cbn_utils.log('')
-            cbn_utils.log(f'{len(rows_to_delete_df.index)} {league} Schools to Delete:')
+            cbn_utils.log(f'{len(rows_to_delete_df.index)} {league} schools to Delete:')
             if len(rows_to_delete_df.index) > 0:
                 cbn_utils.log(f'\n{rows_to_delete_df.to_string()}')
 
             # Add rows not found in existing data
             rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][old_schools_df.columns].reset_index(drop = True)
             cbn_utils.log('')
-            cbn_utils.log(f'{len(rows_to_add_df.index)} {league} Schools to Add:')
+            cbn_utils.log(f'{len(rows_to_add_df.index)} {league} schools to add:')
             if len(rows_to_add_df.index) > 0:
                 cbn_utils.log(f'\n{rows_to_add_df.to_string()}')
             cbn_utils.log('')
 
     def get_ncaa_schools() :
-        df = pd.read_json(cbn_utils.get('https://web3.ncaa.org/directory/api/directory/memberList?type=12&sportCode=MBA').text)
+        json_page = WebPage('https://web3.ncaa.org/directory/api/directory/memberList?type=12&sportCode=MBA').html()
+        soup = BeautifulSoup(json_page, 'html.parser')
+        json_text = soup.find('pre').text
+        df = pd.read_json(json_text)
         df = df[['orgId', 'nameOfficial', 'division', 'athleticWebUrl', 'memberOrgAddress']]
         df['name'] = df['nameOfficial'].apply(lambda x: x.split(' (')[0].strip()) # no parentheses, please
         df['name'] = df['name'].apply(lambda x: re.sub(r'\s-\s[A-Z]{2}$', '', x))
@@ -103,30 +108,37 @@ def schools():
         return get_other_schools('NAIA')
 
     def get_juco_schools():
-        html = WebPage('https://njcaastats.prestosports.com/sports/bsb/teams-page').html()
-        soup = BeautifulSoup(html, 'html.parser')
-        school_tables = soup.find_all('table')
-        if school_tables == None:
-            return pd.DataFrame()
-
         schools = list()
-        for i, school_table in enumerate(school_tables):
-            for tr in school_table.find('tbody').find_all('tr'):
-                td = tr.find_all('td')[1]
-                a = td.find('a')
-                name = a.find_all('span')[1].text.split(' (')[0].split(' (')[0].strip()
 
-                # Remove " - XX" from school names, if applicable
-                name = re.sub(r'\s-\s[A-Z]{2}$', '', name)
+        web_page = WebPage('https://njcaastats.prestosports.com/sports/bsb/teams-page')
+        for division_num in [0, 1, 2]:
+            for _ in range(0, 10):
+                soup = BeautifulSoup(web_page.driver().page_source, 'html.parser')
+                table_div = soup.find('div', {'id': f'team-listing-tab-content{division_num + 1}'})
+                school_tables = table_div.find_all('table')
 
-                url_split1 = a['href'].split('/')
-                url_split2 = url_split1[-1].split('?')[0]
-                schools.append({
-                    'id': url_split2,
-                    'name': name,
-                    'league': 'JUCO',
-                    'division': str(i + 1)
-                })
+                for school_table in school_tables:
+                    tbody = school_table.find('tbody')
+                    if tbody == None: continue
+                    for tr in tbody.find_all('tr'):
+                        td = tr.find_all('td')[1]
+                        a = td.find('a')
+                        name = a.find_all('span')[1].text.split(' (')[0].split(' (')[0].strip()
+
+                        # Remove " - XX" from school names, if applicable
+                        name = re.sub(r'\s-\s[A-Z]{2}$', '', name)
+
+                        url_split1 = a['href'].split('/')
+                        url_split2 = url_split1[-1].split('?')[0]
+                        schools.append({
+                            'id': url_split2,
+                            'name': name,
+                            'league': 'JUCO',
+                            'division': str(division_num + 1)
+                        })
+                if web_page.driver().execute_script('return $("button.page-link.next").eq(' + str(division_num) + ').parent().hasClass("disabled");'):
+                    break
+                web_page.driver().execute_script('$("button.page-link.next").eq(' + str(division_num) + ').click();')
         return compare('JUCO', pd.DataFrame(schools))
 
     def get_cccaa_schools():
@@ -201,7 +213,7 @@ def players():
 
         # Extract Canadians from roster and handle scrape success
         canadians = [player for player in players if player.canadian]
-        if (school.roster_page.redirected() == False) & (len(players) > 0):
+        if (school.roster_page.redirected_to() == None) & (len(players) > 0):
             # Successful
             school_last_roster_check = today_str
 
@@ -285,10 +297,10 @@ def find_player_stat_ids():
 
         for school_stats_url in players_df['stats_url_school'].unique():
             stats_page = StatsPage(school_stats_url, corrections = corrections)
-            print('Looking for a stats url for the following player(s):')
-            if len(stats_page.to_df().index) == 0:
-                continue
+            if not stats_page.success(): continue
+            if len(stats_page.to_df().index) == 0: continue
             search_players_df = players_df[players_df['stats_url_school'] == school_stats_url].drop('stats_url', axis = 1)
+            print('Looking for a stats url for the following player(s):')
             print(search_players_df[['last_name', 'first_name']].to_string())
             print('\nFound the following stats url(s):')
             print(stats_page.to_df().sort_values(by = ['last_name', 'first_name'], ignore_index = True).to_string())
@@ -556,8 +568,12 @@ def minors():
 # if __name__ == '__main__':
 #     schools()
 #     find_ncaa_school_stat_ids()
+
 #     players()
+#     email_additions("pete")
+#     find_player_stat_ids()
+
 #     stats()
 #     positions()
-#     find_player_stat_ids()
+
 #     minors()
