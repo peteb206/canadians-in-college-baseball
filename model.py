@@ -1,6 +1,5 @@
 import cbn_utils
-import requests
-from selenium import webdriver 
+from google_sheets import config
 from bs4 import BeautifulSoup, element
 import pandas as pd
 import json
@@ -77,6 +76,17 @@ class WebPage:
         return self.__driver__
 
 class RosterPage(WebPage):
+    # Class variables
+    __GRAD_YEAR_MAP__ = {
+        int(config['YEAR_SHORT']): "Senior",
+        (int(config['YEAR_SHORT']) + 1): "Junior",
+        (int(config['YEAR_SHORT']) + 2): "Sophomore",
+        (int(config['YEAR_SHORT']) + 3): "Freshman",
+        (int(config['YEAR_SHORT']) + 4): "Freshman",
+        (int(config['YEAR_SHORT']) + 5): "Freshman"
+    }
+    __GRAD_YEAR_MAP__ = {f"'{k}": v for k, v in __GRAD_YEAR_MAP__.items()}
+
     def __init__(self, url = '', corrections: dict[str, str] = dict()):
         WebPage.__init__(self, url)
         self.__result__ = ''
@@ -394,15 +404,10 @@ class RosterPage(WebPage):
             )
             self.__players__.append(player)
 
-    @staticmethod
-    def format_player_class(string: str):
+    def format_player_class(self, string: str):
         # Output Freshman, Sophomore, Junior or Senior
-        # TODO: don't want to have this hardcoded. See how many schools are doing this
-        grad_year_map = {"'25": "Senior", "'26": "Junior", "'27": "Sophomore", "'28": "Freshman"}
-        if string in grad_year_map.keys():
-            cbn_utils.log('CHECK!')
-            return grad_year_map[string]
-
+        if string in self.__GRAD_YEAR_MAP__.keys():
+            return self.__GRAD_YEAR_MAP__[string]
         if ('j' in string) | ('3' in string):
             return 'Junior'
         elif ('so' in string) | (string == 's') | ('2' in string):

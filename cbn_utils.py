@@ -43,7 +43,10 @@ headers = {
 chrome_options = Options()
 chrome_options.add_argument('--headless=new')
 chrome_options.add_argument(f'user-agent={headers}')
-chrome_options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
+chrome_options.add_argument('--disable-dev-shm-usage')
+chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+chrome_options.add_experimental_option('useAutomationExtension', False)
+chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 driver = webdriver.Chrome(options = chrome_options)
 
 def get(url: str):
