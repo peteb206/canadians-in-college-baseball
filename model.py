@@ -27,6 +27,7 @@ class WebPage:
         self.__error_message__ = ''
 
         self.html()
+        cbn_utils.log(f'{url} {self.status()}')
 
     def __repr__(self):
         return self.__url__ + self.status()
@@ -591,7 +592,7 @@ class StatsPage(WebPage):
                     for a in soup.find_all('a'):
                         if (a.text in ['Hitting', 'Pitching']) & ('year_stat_category_id' in a['href']):
                             url_parts = urlparse(url)
-                            html = cbn_utils.get(f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}').text
+                            html = cbn_utils.get(f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}', debug = True).text
 
             hitting_df['OPS'] = hitting_df['OBPct'].astype(float) + hitting_df['SlgPct'].astype(float)
             self.__df__ = pd.merge(

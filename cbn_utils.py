@@ -49,11 +49,10 @@ chrome_options.add_experimental_option('useAutomationExtension', False)
 chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 driver = webdriver.Chrome(options = chrome_options)
 
-def get(url: str):
+def get(url: str, debug: bool = False):
     start_time = datetime.now()
     driver.get(url)
-    end_time = datetime.now()
-    log(f'{url} ({round((end_time - start_time).total_seconds(), 1)}s)')
+    if debug: log(f'{url} ({round((datetime.now() - start_time).total_seconds(), 1)}s)')
     return driver
 
 leagues = [

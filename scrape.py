@@ -21,34 +21,31 @@ def schools():
     old_schools_df = google_sheets.df(schools_worksheet)[school_cols]
 
     def compare(league: str, df: pd.DataFrame):
-        if len(df.index) == 0:
-            cbn_utils.log(f'Failed to scrape {league} schools')
-            cbn_utils.log('')
-        else:
-            cbn_utils.log(f'{len(df.index)} {league} schools found currently')
+        if len(df.index) == 0: return
+        cbn_utils.log(f'{len(df.index)} {league} schools found currently')
 
-            # Compare existing and new data
-            compare_df = pd.merge(
-                old_schools_df[old_schools_df['league'] == league],
-                df[[col for col in old_schools_df.columns if col in df.columns]],
-                how = 'outer',
-                indicator = 'source'
-            ).fillna('')
+        # Compare existing and new data
+        compare_df = pd.merge(
+            old_schools_df[old_schools_df['league'] == league],
+            df[[col for col in old_schools_df.columns if col in df.columns]],
+            how = 'outer',
+            indicator = 'source'
+        ).fillna('')
 
-            # Drop rows not found in new data
-            rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][old_schools_df.columns].reset_index(drop = True)
-            cbn_utils.log('')
-            cbn_utils.log(f'{len(rows_to_delete_df.index)} {league} schools to Delete:')
-            if len(rows_to_delete_df.index) > 0:
-                cbn_utils.log(f'\n{rows_to_delete_df.to_string()}')
+        # Drop rows not found in new data
+        rows_to_delete_df = compare_df[compare_df['source'] == 'left_only'][old_schools_df.columns].reset_index(drop = True)
+        cbn_utils.log('')
+        cbn_utils.log(f'{len(rows_to_delete_df.index)} {league} schools to delete:')
+        if len(rows_to_delete_df.index) > 0:
+            cbn_utils.log(f'\n{rows_to_delete_df.to_string()}')
 
-            # Add rows not found in existing data
-            rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][old_schools_df.columns].reset_index(drop = True)
-            cbn_utils.log('')
-            cbn_utils.log(f'{len(rows_to_add_df.index)} {league} schools to add:')
-            if len(rows_to_add_df.index) > 0:
-                cbn_utils.log(f'\n{rows_to_add_df.to_string()}')
-            cbn_utils.log('')
+        # Add rows not found in existing data
+        rows_to_add_df = compare_df[compare_df['source'] == 'right_only'][old_schools_df.columns].reset_index(drop = True)
+        cbn_utils.log('')
+        cbn_utils.log(f'{len(rows_to_add_df.index)} {league} schools to add:')
+        if len(rows_to_add_df.index) > 0:
+            cbn_utils.log(f'\n{rows_to_add_df.to_string()}')
+        cbn_utils.log('')
 
     def get_ncaa_schools() :
         json_page = WebPage('https://web3.ncaa.org/directory/api/directory/memberList?type=12&sportCode=MBA').html()
@@ -68,8 +65,6 @@ def schools():
         domain = ''
         if league == 'NAIA':
             domain = cbn_utils.NAIA_DOMAIN
-        elif league == 'JUCO':
-            domain = cbn_utils.JUCO_DOMAIN
         elif league == 'CCCAA':
             domain = cbn_utils.CCCAA_DOMAIN
         elif league == 'NWAC':
@@ -78,10 +73,9 @@ def schools():
             domain = cbn_utils.USCAA_DOMAIN
         else:
             return pd.DataFrame()
-        url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/div{division}/teams'
-        if division not in [1, 2, 3]:
-            url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams?dec=printer-decorator'
-        html = WebPage(url).html()
+        url = f'https://{domain}/sports/bsb/{google_sheets.config["ACADEMIC_YEAR"]}/teams?dec=printer-decorator'
+        web_page = WebPage(url)
+        html = web_page.html()
         soup = BeautifulSoup(html, 'html.parser')
         schools = list()
         schools_table = soup.find('table')
@@ -189,7 +183,7 @@ def players():
         school_last_roster_check = school_series['last_roster_check']
         days_since_last_check = (datetime.today() - datetime.strptime(school_last_roster_check, "%Y-%m-%d")).days if school_last_roster_check != '' else 99
         # if i not in [55, 56]: # test a specific school (i should be 2 less than the row number in the google sheet)
-        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 1):
+        if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 2):
             continue # Skip schools that have no parseable roster site or have already been scraped recently
 
         school, roster_url = None, school_series['roster_url']
@@ -390,7 +384,7 @@ def minors():
             'SK': 'Saskatchewan'
         }[abbreviation]
 
-    teams_req = cbn_utils.get('https://statsapi.mlb.com/api/v1/teams')
+    teams_req = cbn_utils.get('https://statsapi.mlb.com/api/v1/teams', debug = True)
     teams_json = json.loads(teams_req.text)
     teams_df = pd.DataFrame(teams_json['teams'])[['id', 'name', 'parentOrgName']]
     teams_df['parentOrgName'].replace('Office of the Commissioner', pd.NA, inplace = True)
@@ -398,12 +392,12 @@ def minors():
     teams_dict = dict(zip(teams_df['id'], teams_df['org']))
 
     scraped_players_df = pd.DataFrame()
-    levels_req = cbn_utils.get('https://statsapi.mlb.com/api/v1/sports')
+    levels_req = cbn_utils.get('https://statsapi.mlb.com/api/v1/sports', debug = True)
     levels_json = json.loads(levels_req.text)
     for level in levels_json['sports']:
         if level['code'] in ['win', 'nlb', 'int', 'nae', 'nas', 'ame', 'bbc', 'hsb']:
             continue
-        players_req = cbn_utils.get(f'https://statsapi.mlb.com/api/v1/sports/{level["id"]}/players')
+        players_req = cbn_utils.get(f'https://statsapi.mlb.com/api/v1/sports/{level["id"]}/players', debug = True)
         players_json = json.loads(players_req.text)
         for player in players_json['people']:
             if 'birthCountry' not in player.keys():
