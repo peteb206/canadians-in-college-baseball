@@ -221,7 +221,7 @@ for province, strings in province_strings.items():
         hometown_conversion_dict[re.sub(r'[^a-zA-Z]+', '', string)] = province
 
 ignore_strings = [
-    'canada college',
+    'canada col',
     'west canada valley',
     'la canada',
     'australia',
