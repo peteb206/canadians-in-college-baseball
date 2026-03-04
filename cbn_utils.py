@@ -27,7 +27,7 @@ RUNNING_LOCALLY = False if platform.system() == 'Linux' else True
 
 NCAA_DOMAIN = 'stats.ncaa.org'
 NAIA_DOMAIN = 'naiastats.prestosports.com'
-JUCO_DOMAIN = 'www.njcaa.org'
+JUCO_DOMAIN = 'njcaastats.prestosports.com'
 CCCAA_DOMAIN = 'www.cccaasports.org'
 NWAC_DOMAIN = 'nwacsports.com'
 USCAA_DOMAIN = 'uscaa.prestosports.com'
