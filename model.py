@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import re
 from urllib.parse import urljoin, urlparse
+import time
 
 class WebPage:
     # Class variables
@@ -27,7 +28,7 @@ class WebPage:
         self.__error_message__ = ''
 
         self.html()
-        cbn_utils.log(f'{url} {self.status()}')
+        cbn_utils.log(f'{url}{self.status()}')
 
     def __repr__(self):
         return self.__url__ + self.status()
@@ -59,6 +60,8 @@ class WebPage:
 
         url_split = self.__url__.split('#')
         self.__driver__ = cbn_utils.get(url_split[0])
+        if cbn_utils.JUCO_DOMAIN in self.__url__:
+            time.sleep(2) # Make sure tables have loaded
         self.__html__ = self.__driver__.page_source
 
         for log_entry in self.__driver__.get_log('performance'):
@@ -520,9 +523,15 @@ class RosterPage(WebPage):
         return city, province 
 
 class StatsPage(WebPage):
+    # Class variables
+    __DF_COLUMNS__ = list(cbn_utils.stats_labels['batting'].keys()) + list(cbn_utils.stats_labels['pitching'].keys())
+
     def __init__(self, url = '', year = '', corrections: dict[str, str] = dict()):
+        if (cbn_utils.CCCAA_DOMAIN in url) & ('/players/' in url):
+            url += '?serverSide'
+
         WebPage.__init__(self, url)
-        self.__df__: pd.DataFrame = None
+        self.__df__ = pd.DataFrame(0, columns = self.__DF_COLUMNS__, index = [0])
         self.__corrections__ = corrections
         if url.endswith('roster') | url.endswith('lineup'):
             self.__fetch_stat_ids__()
@@ -533,13 +542,12 @@ class StatsPage(WebPage):
         return self.__df__
 
     def __fetch_stat_ids__(self):
-        url, html = self.url(), self.html()
-        url_parts = urlparse(url)
+        url_parts = urlparse(self.url())
         if not self.success():
-            return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
-        soup = BeautifulSoup(html, 'html.parser')
+            return cbn_utils.log(f'ERROR: request to {self.url()} was unsuccessful')
+        soup = BeautifulSoup(self.html(), 'html.parser')
         player_links = list()
-        if url.endswith('lineup'):
+        if self.url().endswith('lineup'):
             for div in soup.find_all('div', {'class': 'tabbed-ajax-content'}):
                 if 'data-url' in div.attrs:
                     data_url = f'{url_parts.scheme}://{url_parts.netloc}{div["data-url"]}'
@@ -567,104 +575,149 @@ class StatsPage(WebPage):
         self.__df__ = pd.DataFrame(player_links).drop_duplicates(ignore_index = True)
 
     def __fetch_stats__(self, year):
-        url, html = self.url(), self.html()
         if not self.success():
-            return cbn_utils.log(f'ERROR: request to {url} was unsuccessful')
-        df_columns = list(cbn_utils.stats_labels['batting'].keys()) + list(cbn_utils.stats_labels['pitching'].keys())
-        hitting_df, pitching_df = pd.DataFrame(), pd.DataFrame()
-        if cbn_utils.NCAA_DOMAIN in url:
-            soup = BeautifulSoup(html, 'html.parser')
-            hitting_cols = ['G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'BA', 'OBPct', 'SlgPct']
-            pitching_cols = ['App', 'GS', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'SO']
-            hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
-            for tab in ['current', 'other']:
-                dfs = pd.read_html(html)
-                for df in dfs:
-                    if 'Year' not in df.columns:
-                        continue
-                    if 'ERA' in df.columns:
-                        pitching_df = df[df['Year'].str.endswith(year)]
-                        pitching_df = pitching_df[pitching_cols]
-                    else:
-                        hitting_df = df[df['Year'].str.endswith(year)]
-                        hitting_df = hitting_df[hitting_cols]
-                if tab == 'other':
-                    for a in soup.find_all('a'):
-                        if (a.text in ['Hitting', 'Pitching']) & ('year_stat_category_id' in a['href']):
-                            url_parts = urlparse(url)
-                            html = cbn_utils.get(f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}', debug = True).text
-
-            hitting_df['OPS'] = hitting_df['OBPct'].astype(float) + hitting_df['SlgPct'].astype(float)
-            self.__df__ = pd.merge(
-                hitting_df,
-                pitching_df,
-                how = 'inner' if (len(hitting_df.index) > 0) & (len(pitching_df.index) > 0) else 'left' if len(hitting_df.index) > 0 else 'right' if len(pitching_df.index) > 0 else 'outer',
-                left_index = True,
-                right_index = True,
-                suffixes = ['', 'A'] # H vs HA
-            )
-            self.__df__.fillna(0, inplace = True)
-            if (len(self.__df__.index) == 0):
-                self.__df__ = pd.DataFrame(0, columns = self.__df__.columns, index = [0])
-            self.__df__.columns = df_columns
-        elif (cbn_utils.JUCO_DOMAIN in url) | (cbn_utils.NWAC_DOMAIN in url):
-            hitting_cols = ['Games', 'At Bats', 'Runs', 'Hits', 'Doubles', 'Triples', 'Home Runs', 'Runs Batted In', 'Stolen Bases', 'Batting Average', 'On Base Percentage', 'Slugging Percentage']
-            pitching_cols = ['Appearances', 'Games started', 'Innings Pitched', 'Wins', 'Losses', 'Earned Runs', 'Hits', 'Walks', 'Earned Run Average', 'Saves', 'Strikeouts']
-            dfs = pd.read_html(html)
-            for df in dfs:
-                if 'Overall' not in df.columns:
-                    continue
-                df.rename({'&nbsp': 'Statistics category'}, axis = 1, inplace = True)
-
-                hitting_df = df.drop_duplicates(subset = 'Statistics category', keep = 'first')
-                hitting_df = hitting_df[hitting_df['Statistics category'].isin(hitting_cols)]
-                hitting_df.replace('-', 0, inplace = True)
-                hitting_df = pd.DataFrame([dict(zip(hitting_df['Statistics category'], hitting_df['Overall']))])
-                hitting_df = hitting_df[hitting_cols]
-                hitting_df['OPS'] = hitting_df['On Base Percentage'].astype(float) + hitting_df['Slugging Percentage'].astype(float)
-
-                pitching_df = df.drop_duplicates(subset = 'Statistics category', keep = 'last')
-                pitching_df = pitching_df[pitching_df['Statistics category'].isin(pitching_cols)]
-                pitching_df.replace('-', 0, inplace = True)
-                pitching_df = pd.DataFrame([dict(zip(pitching_df['Statistics category'], pitching_df['Overall']))])
-                pitching_df = pitching_df[pitching_cols]
-
-                self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
-                self.__df__.columns = df_columns
-                break
+            return cbn_utils.log(f'ERROR: request to {self.url()} was unsuccessful')
+        if cbn_utils.NCAA_DOMAIN in self.url():
+            self.__fetch_ncaa_stats__(year)
+        elif cbn_utils.JUCO_DOMAIN in self.url():
+            self.__fetch_juco_stats__()
+        elif cbn_utils.NWAC_DOMAIN in self.url():
+            self.__fetch_nwac_stats__()
         else:
-            hitting_cols = ['gp', 'ab', 'r', 'h', '2b', '3b', 'hr', 'rbi', 'sb', 'avg', 'obp', 'slg']
-            pitching_cols = ['app', 'gs', 'ip', 'w', 'l', 'er', 'h', 'whip', 'era', 'sv', 'k'] # whip will be converted to bb
-            hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
-            dfs = pd.read_html(html)
+            self.__fetch_other_stats__(year)  
+
+    def __fetch_ncaa_stats__(self, year):
+        soup = BeautifulSoup(self.html(), 'html.parser')
+        if soup.find('table') == None:
+            return cbn_utils.log(f'ERROR: {self.url()} had no tables')
+        hitting_cols = ['G', 'AB', 'R', 'H', '2B', '3B', 'HR', 'RBI', 'SB', 'BA', 'OBPct', 'SlgPct']
+        pitching_cols = ['App', 'GS', 'IP', 'W', 'L', 'ER', 'H', 'BB', 'ERA', 'SV', 'SO']
+        hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
+        for tab in ['current', 'other']:
+            dfs = pd.read_html(self.html())
             for df in dfs:
-                if 'Date' in df.columns:
+                if 'Year' not in df.columns:
                     continue
-                if 'gp' in df.columns:
-                    if len(hitting_df.index) == 0:
-                        hitting_df = df[df['Unnamed: 0'].str.endswith(year)]
-                    else:
-                        hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'].str.endswith(year)], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
-                elif (len(df.index) <= 6) & (('app' in df.columns) | ('er' in df.columns)):
-                    if len(pitching_df.index) == 0:
-                        pitching_df = df[df['Unnamed: 0'].str.endswith(year)]
-                    else:
-                        pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'].str.endswith(year)], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+                if 'ERA' in df.columns:
+                    pitching_df = df[df['Year'].str.endswith(year)]
+                    pitching_df = pitching_df[pitching_cols]
+                elif 'AB' in df.columns:
+                    hitting_df = df[df['Year'].str.endswith(year)]
+                    hitting_df = hitting_df[hitting_cols]
+            if tab == 'other':
+                for a in soup.find_all('a'):
+                    if (a.text in ['Hitting', 'Pitching']) & ('year_stat_category_id' in a['href']):
+                        url_parts = urlparse(self.url())
+                        self.__html__ = cbn_utils.get(f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}', debug = True).page_source
 
-            hitting_df = hitting_df[hitting_cols]
+        hitting_df['OPS'] = hitting_df['OBPct'].astype(float) + hitting_df['SlgPct'].astype(float)
+        self.__df__ = pd.merge(
+            hitting_df,
+            pitching_df,
+            how = 'inner' if (len(hitting_df.index) > 0) & (len(pitching_df.index) > 0) else 'left' if len(hitting_df.index) > 0 else 'right' if len(pitching_df.index) > 0 else 'outer',
+            left_index = True,
+            right_index = True,
+            suffixes = ['', 'A'] # H vs HA
+        )
+        self.__df__.fillna(0, inplace = True)
+        if (len(self.__df__.index) == 0):
+            self.__df__ = pd.DataFrame(0, columns = self.__DF_COLUMNS__, index = [0])
+        self.__df__.columns = self.__DF_COLUMNS__
+
+    def __fetch_juco_stats__(self):
+        hitting_cols = ['gp', 'ab', 'r', 'h', '2b', '3b', 'hr', 'rbi', 'sb', 'avg', 'obp', 'slg']
+        pitching_cols = ['app', 'gs', 'ip', 'w', 'l', 'er', 'h', 'whip', 'era', 'sv', 'k'] # whip will be converted to bb
+        hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
+        dfs = pd.read_html(self.html())
+        for df in dfs:
+            if 'Date' in df.columns:
+                continue
+            if 'gp' in df.columns:
+                if len(hitting_df.index) == 0:
+                    hitting_df = df[df['Unnamed: 0'] == 'Total']
+                else:
+                    hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'] == 'Total'], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+            elif (len(df.index) <= 6) & (('app' in df.columns) | ('er' in df.columns)):
+                if len(pitching_df.index) == 0:
+                    pitching_df = df[df['Unnamed: 0'] == 'Total']
+                else:
+                    pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'] == 'Total'], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+
+        hitting_df = hitting_df[hitting_cols]
+        hitting_df.replace('-', 0, inplace = True)
+        hitting_df['ops'] = hitting_df['obp'].astype(float) + hitting_df['slg'].astype(float)
+        hitting_df.reset_index(drop = True, inplace = True)
+
+        pitching_df = pitching_df[pitching_cols]
+        pitching_df.replace('-', 0, inplace = True)
+        pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'].astype(float) - pitching_df['h'].astype(int)
+        pitching_df.rename({'whip': 'bb'}, axis = 1, inplace = True)
+        pitching_df['bb'] = pitching_df['bb'].round()
+        pitching_df.reset_index(drop = True, inplace = True)
+
+        self.__df__ = pd.merge(hitting_df, pitching_df, how = 'outer', left_index = True, right_index = True)
+        self.__df__.fillna(0, inplace = True)
+        self.__df__.columns = self.__DF_COLUMNS__
+
+    def __fetch_nwac_stats__(self):
+        hitting_cols = ['Games', 'At Bats', 'Runs', 'Hits', 'Doubles', 'Triples', 'Home Runs', 'Runs Batted In', 'Stolen Bases', 'Batting Average', 'On Base Percentage', 'Slugging Percentage']
+        pitching_cols = ['Appearances', 'Games started', 'Innings Pitched', 'Wins', 'Losses', 'Earned Runs', 'Hits', 'Walks', 'Earned Run Average', 'Saves', 'Strikeouts']
+        dfs = pd.read_html(self.html())
+        for df in dfs:
+            if 'Overall' not in df.columns:
+                continue
+            df.rename({df.columns[0]: 'Statistics category'}, axis = 1, inplace = True)
+
+            hitting_df = df.drop_duplicates(subset = 'Statistics category', keep = 'first')
+            hitting_df = hitting_df[hitting_df['Statistics category'].isin(hitting_cols)]
             hitting_df.replace('-', 0, inplace = True)
-            hitting_df['ops'] = hitting_df['obp'].astype(float) + hitting_df['slg'].astype(float)
-            hitting_df.reset_index(drop = True, inplace = True)
+            hitting_df = pd.DataFrame([dict(zip(hitting_df['Statistics category'], hitting_df['Overall']))])
+            hitting_df = hitting_df[hitting_cols]
+            hitting_df['OPS'] = hitting_df['On Base Percentage'].astype(float) + hitting_df['Slugging Percentage'].astype(float)
 
-            pitching_df = pitching_df[pitching_cols]
+            pitching_df = df.drop_duplicates(subset = 'Statistics category', keep = 'last')
+            pitching_df = pitching_df[pitching_df['Statistics category'].isin(pitching_cols)]
             pitching_df.replace('-', 0, inplace = True)
-            pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'].astype(float) - pitching_df['h'].astype(int)
-            pitching_df.rename({'whip': 'bb'}, axis = 1, inplace = True)
-            pitching_df['bb'] = pitching_df['bb'].round()
-            pitching_df.reset_index(drop = True, inplace = True)
+            pitching_df = pd.DataFrame([dict(zip(pitching_df['Statistics category'], pitching_df['Overall']))])
+            pitching_df = pitching_df[pitching_cols]
 
             self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
-            self.__df__.columns = df_columns   
+            self.__df__.columns = self.__DF_COLUMNS__
+            break
+
+    def __fetch_other_stats__(self, year):
+        hitting_cols = ['gp', 'ab', 'r', 'h', '2b', '3b', 'hr', 'rbi', 'sb', 'avg', 'obp', 'slg']
+        pitching_cols = ['app', 'gs', 'ip', 'w', 'l', 'er', 'h', 'whip', 'era', 'sv', 'k'] # whip will be converted to bb
+        hitting_df, pitching_df = pd.DataFrame(columns = hitting_cols), pd.DataFrame(columns = pitching_cols)
+        dfs = pd.read_html(self.html())
+        for df in dfs:
+            if 'Date' in df.columns:
+                continue
+            if 'gp' in df.columns:
+                if len(hitting_df.index) == 0:
+                    hitting_df = df[df['Unnamed: 0'].str.endswith(year)]
+                else:
+                    hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'].fillna('').str.endswith(year)], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+            elif (len(df.index) <= 6) & (('app' in df.columns) | ('er' in df.columns)):
+                if len(pitching_df.index) == 0:
+                    pitching_df = df[df['Unnamed: 0'].str.endswith(year)]
+                else:
+                    pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'].fillna('').str.endswith(year)], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+
+        hitting_df = hitting_df[hitting_cols]
+        hitting_df.replace('-', 0, inplace = True)
+        hitting_df['ops'] = hitting_df['obp'].astype(float) + hitting_df['slg'].astype(float)
+        hitting_df.reset_index(drop = True, inplace = True)
+
+        pitching_df = pitching_df[pitching_cols]
+        pitching_df.replace('-', 0, inplace = True)
+        pitching_df['whip'] = pitching_df['ip'].apply(lambda x: round(x) + 1 / 3 if str(x).endswith('.1') else round(x) + 2 / 3 if str(x).endswith('.2') else round(x)) * pitching_df['whip'].astype(float) - pitching_df['h'].astype(int)
+        pitching_df.rename({'whip': 'bb'}, axis = 1, inplace = True)
+        pitching_df['bb'] = pitching_df['bb'].round()
+        pitching_df.reset_index(drop = True, inplace = True)
+
+        self.__df__ = pd.merge(hitting_df, pitching_df, left_index = True, right_index = True)
+        self.__df__.columns = self.__DF_COLUMNS__ 
 
 class SchedulePage(WebPage):
     def __init__(self, url = ''):
@@ -857,8 +910,6 @@ class Player:
         stat_dict = stat_dict_list[0]
         self.G = int(stat_dict['G'])
         self.AB = int(stat_dict['AB'])
-        if self.AB < 10:
-            self.G = 0 # Some leagues count pitcher appearances as games, too
         self.R = int(stat_dict['R'])
         self.H = int(stat_dict['H'])
         self._2B = int(stat_dict['2B'])
