@@ -51,7 +51,10 @@ driver = webdriver.Chrome(options = chrome_options)
 
 def get(url: str, debug: bool = False):
     start_time = datetime.now()
-    driver.get(url)
+    try:
+        driver.get(url)
+    except urllib3.exceptions.ReadTimeoutError:
+        get(url, debug = True) # try one more time
     if debug: log(f'{url} ({round((datetime.now() - start_time).total_seconds(), 1)}s)')
     return driver
 

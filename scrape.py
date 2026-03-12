@@ -313,6 +313,7 @@ def stats():
         for i, player_row in players_df.iterrows():
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
+            # if i != 1206: continue # test a specific player (i should be 2 less than the row number in the google sheet)
             if (days_since_last_check <= 1) | (player_row['stats_url'] == ''):
                 continue
             player = Player(
@@ -325,7 +326,7 @@ def stats():
                 if success == False:
                     continue
                 stat_values = list(player.to_dict().values())[13:]
-                cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[today_str, player_row['stats_url']] + stat_values]))
+                cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[today_str if (player.G > 0) | (player.APP > 0) else '', player_row['stats_url']] + stat_values]))
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {player_row["stats_url"]} - {str(e)}')
     cbn_utils.driver.close()
