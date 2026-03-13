@@ -2,6 +2,7 @@ import re
 import requests
 from selenium import webdriver 
 from selenium.webdriver.chrome.options import Options
+from selenium_stealth import stealth
 import os
 import platform
 import pandas as pd
@@ -46,6 +47,11 @@ chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
 chrome_options.add_experimental_option('useAutomationExtension', False)
 chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 driver = webdriver.Chrome(options = chrome_options)
+
+stealth(driver,
+    platform = 'Win32',
+    fix_hairline = True,
+)
 
 def get(url: str, debug: bool = False):
     start_time = datetime.now()
