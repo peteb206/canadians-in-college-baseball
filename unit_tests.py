@@ -21,7 +21,7 @@ urls_to_try = [
 for url in urls_to_try:
     print('--------------')
     print(url)
-    resp = requests.get(url, timeout = 120, impersonate = 'chrome')
+    resp = requests.get(url, cookies = {'aws-waf-token': 'f7e2ffe5-35c7-4052-8dd5-c6e5b8538f89:EgoAko6bFklyAAAA:4LESknukysQC9Swo0PCyettsYFTFaGU4TXEfKHZqNPX3SH3n6nGabdcpY+krA9YLieZxBN9OFo4rRZhkX9bGzq9rItzYynAVt28CV/KHlwi+EhbuOQprweo29Y4cZ+PqdGHcVam380nbslEKhx72D6kUYSKcNiwNGMWVMvqzbgc5GzWzTUEQuXFokO1POGK8KRgRWRls'}, timeout = 120, impersonate = 'chrome')
     print(resp.status_code)
     soup = BeautifulSoup(resp.text, 'html.parser')
     print(f'{len(soup.find_all("table"))} tables found')
