@@ -11,8 +11,6 @@ import smtplib
 from email.mime.text import MIMEText
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
-urllib3 = requests.packages.urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Environment
 def env(key: str):
@@ -53,7 +51,7 @@ def get(url: str, debug: bool = False):
     start_time = datetime.now()
     try:
         driver.get(url)
-    except urllib3.exceptions.ReadTimeoutError:
+    except:
         get(url, debug = True) # try one more time
     if debug: log(f'{url} ({round((datetime.now() - start_time).total_seconds(), 1)}s)')
     return driver
@@ -248,3 +246,5 @@ ignore_strings = [
 
 def is_canadian(string: str) -> bool:
     return bool(any(canada_string.lower() in string.lower() for canada_string in canada_strings)) & (not any(ignore_string in string.lower() for ignore_string in ignore_strings))
+
+log(f'Local IP Address: {requests.get("https://api.ipify.org").text}')
