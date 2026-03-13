@@ -1,6 +1,7 @@
 from curl_cffi import requests
 from bs4 import BeautifulSoup
 import re
+import time
 
 urls_to_try = [
     'https://smcgaels.com/sports/baseball/roster/2026',
@@ -16,8 +17,10 @@ urls_to_try = [
 for url in urls_to_try:
     print('--------------')
     print(url)
-    resp = requests.get(url, impersonate = 'chrome')
+    resp = requests.get(url, timeout = 120, impersonate = 'chrome')
     print(resp.status_code)
     soup = BeautifulSoup(resp.text, 'html.parser')
     print(f'{len(soup.find_all("table"))} tables found')
     print(f'{len(soup.find_all("th", string = re.compile("Total")))} th found with "Total" as the text')
+    print(resp.text)
+    time.sleep(10)
