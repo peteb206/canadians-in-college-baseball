@@ -310,7 +310,7 @@ def stats():
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
 
-        ncaa_count = 0 # need to track how often we hit this site so we don'y get blocked
+        ncaa_count = 0 # need to track how often we hit this site so we don't get blocked
 
         for i, player_row in players_df.iterrows():
             if ncaa_count == 50: continue
@@ -319,14 +319,14 @@ def stats():
                 first_name = player_row['first_name'],
                 stats_url = player_row['stats_url']
             )
-            # if i != 1206: continue # test a specific player (i should be 2 less than the row number in the google sheet)
+            # if cbn_utils.NWAC_DOMAIN not in player.stats_url: continue # test a specific player (i should be 2 less than the row number in the google sheet)
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
             if days_since_last_check <= 1:
-                print(f'{player}\'s stats were checked on {player_last_stats_update}... skipping')
+                cbn_utils.log(f'{player}\'s stats were updated on {player_last_stats_update}... skipping')
                 continue
             if player.stats_url == '':
-                print(f'{player} does not have a `stats_url`... skipping')
+                cbn_utils.log(f'{player} does not have a `stats_url`... skipping')
                 continue
             if cbn_utils.NCAA_DOMAIN in player.stats_url:
                 ncaa_count += 1
@@ -575,7 +575,7 @@ if __name__ == '__main__':
     # email_additions("pete")
     # find_player_stat_ids()
 
-    # stats()
+    stats()
     # positions()
 
     # minors()
