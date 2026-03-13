@@ -81,7 +81,7 @@ class WebPage:
                     self.__success__ = (200 <= status_code < 300)
                     if not self.__success__:
                         self.__error_message__ = status_code
-
+                        cbn_utils.log(self.__html__)
         return self.__html__
 
     def driver(self):
@@ -544,7 +544,7 @@ class StatsPage(WebPage):
         elif url != '':
             self.html()
             if not self.success():
-                return cbn_utils.log(f'ERROR: request to {self.url()} was unsuccessful')
+                return
             if cbn_utils.NCAA_DOMAIN in self.url():
                 self.__fetch_ncaa_stats__()
             else:
@@ -556,7 +556,7 @@ class StatsPage(WebPage):
     def __fetch_stat_ids__(self):
         url_parts = urlparse(self.url())
         if not self.success():
-            return cbn_utils.log(f'ERROR: request to {self.url()} was unsuccessful')
+            return
         soup = BeautifulSoup(self.html(), 'html.parser')
         player_links = list()
         if self.url().endswith('lineup'):

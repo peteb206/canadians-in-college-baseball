@@ -199,7 +199,7 @@ def players():
                 corrections = corrections
             )
         except Exception as e:
-            cbn_utils.log(f'ERROR: School instance __init__ - {school_series["name"]} - {school_series["roster_url"]} - {str(e)}')
+            cbn_utils.log(f'{school_series["roster_url"]} - {str(e)}')
             continue # Skip iteration
 
         # Fetch players from school's roster page
@@ -330,13 +330,9 @@ def stats():
                 continue
             if cbn_utils.NCAA_DOMAIN in player.stats_url:
                 ncaa_count += 1
-            try:
-                success = player.add_stats(google_sheets.config['YEAR_SHORT'])
-                if not success: continue
+            if player.add_stats(google_sheets.config['YEAR_SHORT']):
                 stat_values = list(player.to_dict().values())[13:]
                 cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[today_str if (player.G > 0) | (player.APP > 0) else '', player_row['stats_url']] + stat_values]))
-            except Exception as e:
-                cbn_utils.log(f'ERROR: Player.add_stats - {player_row["stats_url"]} - {str(e)}')
 
 def positions():
     # Manual corrections
@@ -575,7 +571,7 @@ if __name__ == '__main__':
     # email_additions("pete")
     # find_player_stat_ids()
 
-    stats()
+    # stats()
     # positions()
 
     # minors()
