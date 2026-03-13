@@ -1,7 +1,6 @@
 import re
 import requests
-from selenium import webdriver 
-from selenium.webdriver.chrome.options import Options
+from seleniumwire import webdriver
 from selenium_stealth import stealth
 import os
 import platform
@@ -10,6 +9,7 @@ from datetime import datetime
 import time
 import smtplib
 from email.mime.text import MIMEText
+from urllib.parse import urlparse
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -36,10 +36,11 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    'X-Requested-With': 'XMLHttpRequest'
+    'X-Requested-With': 'XMLHttpRequest',
+    'Referer': ''
 }
 
-chrome_options = Options()
+chrome_options = webdriver.ChromeOptions()
 chrome_options.add_argument('--headless=new')
 chrome_options.add_argument(f'user-agent={headers}')
 chrome_options.add_argument('--disable-dev-shm-usage')
@@ -47,6 +48,12 @@ chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
 chrome_options.add_experimental_option('useAutomationExtension', False)
 chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 driver = webdriver.Chrome(options = chrome_options)
+
+def interceptor(request):
+    parsed_url = urlparse(request.url)
+    del request.headers['Referer'] 
+    request.headers['Referer'] = f'{parsed_url.scheme}://{parsed_url.netloc}/'
+driver.request_interceptor = interceptor
 
 stealth(driver,
     platform = 'Win32',
