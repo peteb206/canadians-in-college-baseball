@@ -19,7 +19,5 @@ for url in urls_to_try:
     resp = requests.get(url, impersonate = 'chrome')
     print(resp.status_code)
     soup = BeautifulSoup(resp.text, 'html.parser')
-    if 'stats.ncaa.org' in url:
-        print(f'{len(soup.find_all("table"))} tables found')
-    else:
-        print(f'{len(soup.find_all("th", string = re.compile("Total")))} tables found with "Total"')
+    print(f'{len(soup.find_all("table"))} tables found')
+    print(f'{len(soup.find_all("th", string = re.compile("Total")))} th found with "Total" as the text')
