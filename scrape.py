@@ -310,9 +310,12 @@ def stats():
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
 
+        ncaa_count = 0 # need to track how often we hit this site so we don'y get blocked
+
         for i, player_row in players_df.iterrows():
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
+            if ncaa_count == 50: continue # test a specific player (i should be 2 less than the row number in the google sheet)
             # if i != 1206: continue # test a specific player (i should be 2 less than the row number in the google sheet)
             if (days_since_last_check <= 1) | (player_row['stats_url'] == ''):
                 continue
@@ -322,6 +325,8 @@ def stats():
                 stats_url = player_row['stats_url']
             )
             try:
+                if cbn_utils.NCAA_DOMAIN in player.stats_url:
+                    ncaa_count += 1
                 success = player.add_stats(google_sheets.config['YEAR_SHORT'])
                 if success == False:
                     continue
@@ -329,7 +334,6 @@ def stats():
                 cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[today_str if (player.G > 0) | (player.APP > 0) else '', player_row['stats_url']] + stat_values]))
             except Exception as e:
                 cbn_utils.log(f'ERROR: Player.add_stats - {player_row["stats_url"]} - {str(e)}')
-    cbn_utils.driver.close()
 
 def positions():
     # Manual corrections
@@ -560,15 +564,17 @@ def minors():
     ))
 
 
-# if __name__ == '__main__':
-#     schools()
-#     find_ncaa_school_stat_ids()
+if __name__ == '__main__':
+    # schools()
+    # find_ncaa_school_stat_ids()
 
-#     players()
-#     email_additions("pete")
-#     find_player_stat_ids()
+    # players()
+    # email_additions("pete")
+    # find_player_stat_ids()
 
-#     stats()
-#     positions()
+    # stats()
+    # positions()
 
-#     minors()
+    # minors()
+
+    cbn_utils.driver.quit()

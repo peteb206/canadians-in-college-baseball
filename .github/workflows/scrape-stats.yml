@@ -1,7 +1,7 @@
 name: scrape-stats
 on:
    schedule:
-      - cron: '0 17 * * 1' # https://crontab.guru
+      - cron: '0 13-22 * * 1' # https://crontab.guru - will run several times each Monday to space out requests
    workflow_dispatch:
 jobs:
    build:
