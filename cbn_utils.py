@@ -31,44 +31,6 @@ CCCAA_DOMAIN = 'www.cccaasports.org'
 NWAC_DOMAIN = 'nwacsports.com'
 USCAA_DOMAIN = 'uscaa.prestosports.com'
 
-# Requests
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    'X-Requested-With': 'XMLHttpRequest',
-    'Referer': ''
-}
-
-chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument('--headless=new')
-chrome_options.add_argument(f'user-agent={headers}')
-chrome_options.add_argument('--disable-dev-shm-usage')
-chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
-chrome_options.add_experimental_option('useAutomationExtension', False)
-chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-driver = webdriver.Chrome(options = chrome_options)
-
-def interceptor(request):
-    parsed_url = urlparse(request.url)
-    del request.headers['Referer'] 
-    request.headers['Referer'] = f'{parsed_url.scheme}://{parsed_url.netloc}/'
-driver.request_interceptor = interceptor
-
-stealth(driver,
-    platform = 'Win32',
-    fix_hairline = True,
-)
-
-def get(url: str, debug: bool = False):
-    start_time = datetime.now()
-    try:
-        driver.get(url)
-    except:
-        get(url, debug = True) # try one more time
-    if debug: log(f'{url} ({round((datetime.now() - start_time).total_seconds(), 1)}s)')
-    return driver
-
 leagues = [
     {'league': 'NCAA', 'division': str(division), 'label': f'NCAA: Division {division}'} for division in range(1, 4)
 ] + [
@@ -260,4 +222,50 @@ ignore_strings = [
 def is_canadian(string: str) -> bool:
     return bool(any(canada_string.lower() in string.lower() for canada_string in canada_strings)) & (not any(ignore_string in string.lower() for ignore_string in ignore_strings))
 
+# Requests
 log(f'Local IP Address: {requests.get("https://api.ipify.org").text}')
+
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    'X-Requested-With': 'XMLHttpRequest',
+    'Referer': ''
+}
+
+def new_driver():
+    log('Setting up new driver')
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument('--headless=new')
+    chrome_options.add_argument(f'user-agent={headers}')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+    driver = webdriver.Chrome(options = chrome_options)
+
+    def interceptor(request):
+        parsed_url = urlparse(request.url)
+        del request.headers['Referer'] 
+        request.headers['Referer'] = f'{parsed_url.scheme}://{parsed_url.netloc}/'
+    driver.request_interceptor = interceptor
+
+    stealth(driver,
+        platform = 'Win32',
+        fix_hairline = True
+    )
+    return driver
+
+driver = new_driver()
+
+def get(url: str, debug: bool = False):
+    start_time = datetime.now()
+    global driver
+    try:
+        driver.get(url)
+    except:
+        pause(driver.quit())
+        driver = new_driver()
+        get(url, debug = True) # try one more time
+    if debug: log(f'{url} ({round((datetime.now() - start_time).total_seconds(), 1)}s)')
+    return driver

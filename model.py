@@ -5,7 +5,6 @@ import pandas as pd
 import json
 import re
 from urllib.parse import urljoin, urlparse
-import time
 
 class WebPage:
     # Class variables
@@ -50,7 +49,7 @@ class WebPage:
         return self.__success__
 
     def redirected_to(self):
-        if self.__driver__.current_url != self.__url__:
+        if self.__driver__.current_url != self.url():
             return self.__driver__.current_url
 
     def html(self) -> str:
@@ -60,7 +59,7 @@ class WebPage:
 
         url_split = self.url().split('#')
         self.__driver__ = cbn_utils.get(url_split[0])
-        if ('/players/' in self.__url__) & (cbn_utils.NCAA_DOMAIN not in self.url()):
+        if ('/players/' in self.url()) & (cbn_utils.NCAA_DOMAIN not in self.url()):
             attempt = 1
             stats_loaded = False
             while (attempt <= 10) & (not stats_loaded):
@@ -70,6 +69,11 @@ class WebPage:
                 attempt += 1
             if not stats_loaded:
                 cbn_utils.log('Stats never loaded...')
+        elif ('/roster' in self.url()) & (cbn_utils.NCAA_DOMAIN not in self.url()):
+            pauses = 0
+            while ('sidearm-roster-player-container' not in self.__driver__.page_source) & ('<table' not in self.__driver__.page_source) & (pauses < 3):
+                cbn_utils.pause(None) # Make sure sidearm has loaded
+                pauses += 1
         self.__html__ = self.__driver__.page_source
 
         for log_entry in self.__driver__.get_log('performance'):
@@ -81,7 +85,7 @@ class WebPage:
                     self.__success__ = (200 <= status_code < 300)
                     if not self.__success__:
                         self.__error_message__ = status_code
-                        cbn_utils.log(self.__html__)
+                        # cbn_utils.log(self.__html__)
         return self.__html__
 
     def driver(self):
