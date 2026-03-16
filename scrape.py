@@ -318,7 +318,7 @@ def stats():
                 first_name = player_row['first_name'],
                 stats_url = player_row['stats_url']
             )
-            if (cbn_utils.NCAA_DOMAIN in player_row['stats_url']) | (cbn_utils.JUCO_DOMAIN in player_row['stats_url']): continue # test a specific player (i should be 2 less than the row number in the google sheet)
+            # if (cbn_utils.NCAA_DOMAIN in player_row['stats_url']) | (cbn_utils.JUCO_DOMAIN in player_row['stats_url']): continue # test a specific player (i should be 2 less than the row number in the google sheet)
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
             if days_since_last_check <= 1:
