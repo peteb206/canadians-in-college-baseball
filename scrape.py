@@ -332,9 +332,9 @@ def stats():
                 if ncaa_count == 50: return
             if player.add_stats(google_sheets.config['YEAR_SHORT']):
                 stat_values = list(player.to_dict().values())[13:]
-                player_last_stats_update = today_str
-                if (player.G == 0) & (player_row['G'] not in ['', 0]) & (player.APP == 0) & (player_row['APP'] not in ['', 0]):
-                    player_last_stats_update = ''
+                player_last_stats_update = ''
+                if (player.G > 0) | (player_row['G'] in ['', 0]) | (player.APP > 0) | (player_row['APP'] in ['', 0]):
+                    player_last_stats_update = today_str
                 cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[player_last_stats_update, player_row['stats_url']] + stat_values]))
 
 def positions():
