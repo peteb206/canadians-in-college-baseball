@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup, element
 import pandas as pd
 import json
 import re
+from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
 class WebPage:
@@ -21,12 +22,16 @@ class WebPage:
 
         # Instance variables
         self.__url__ = url
+        if cbn_utils.CCCAA_DOMAIN in url:
+            self.__url__ += '?serverSide'
         self.__driver__ = None
         self.__html__ = ''
         self.__success__ = False
         self.__error_message__ = ''
 
+        start_time = datetime.now()
         self.html()
+        self.__time_to_read__ = (datetime.now() - start_time).total_seconds()
         cbn_utils.log(f'{url}{self.status()}')
 
     def __repr__(self):
@@ -40,6 +45,7 @@ class WebPage:
             status += f' {self.__SUCCESS_ICON__}'
         else:
             status += f' {self.__ERROR_ICON__} {self.__error_message__}'
+        status += f' {round(self.__time_to_read__, 1)}s'
         return status
 
     def url(self) -> str:
@@ -80,12 +86,12 @@ class WebPage:
             message = json.loads(log_entry['message'])['message']
             if message['method'] == 'Network.responseReceived':
                 response = message['params']['response']
-                if self.__driver__.current_url == response['url']:
+                if self.__driver__.current_url.replace('?serverSide', '') == response['url'].replace('?serverSide', ''):
                     status_code = response['status']
                     self.__success__ = (200 <= status_code < 300)
                     if not self.__success__:
                         self.__error_message__ = status_code
-                        # cbn_utils.log(self.__html__)
+                    break
         return self.__html__
 
     def driver(self):
@@ -637,13 +643,15 @@ class StatsPage(WebPage):
             if 'Date' in df.columns:
                 continue
             if ('gp' in df.columns) | ('g' in df.columns):
+                if ('gp' not in df.columns) & ('g' in hitting_df.columns):
+                    df.rename({'g': 'gp'}, axis = 1, inplace = True)
                 if len(hitting_df.index) == 0:
-                    hitting_df = df[df['Unnamed: 0'] == 'Total']
+                    hitting_df = df[df['Unnamed: 0'] == 'Total'].copy()
                 else:
                     hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'] == 'Total'], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
             elif ('app' in df.columns) | ('er' in df.columns):
                 if len(pitching_df.index) == 0:
-                    pitching_df = df[df['Unnamed: 0'] == 'Total']
+                    pitching_df = df[df['Unnamed: 0'] == 'Total'].copy()
                 else:
                     pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'] == 'Total'], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
 

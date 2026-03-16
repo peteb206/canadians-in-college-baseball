@@ -258,14 +258,11 @@ def new_driver():
 
 driver = new_driver()
 
-def get(url: str, debug: bool = False):
-    start_time = datetime.now()
+def get(url: str):
     global driver
     try:
         driver.get(url)
     except:
         pause(driver.quit())
         driver = new_driver()
-        get(url, debug = True) # try one more time
-    if debug: log(f'{url} ({round((datetime.now() - start_time).total_seconds(), 1)}s)')
     return driver
