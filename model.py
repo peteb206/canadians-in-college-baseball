@@ -618,7 +618,7 @@ class StatsPage(WebPage):
                 for a in soup.find_all('a'):
                     if (a.text in ['Hitting', 'Pitching']) & ('year_stat_category_id' in a['href']):
                         url_parts = urlparse(self.url())
-                        self.__html__ = cbn_utils.get(f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}', debug = True).page_source
+                        self.__html__ = StatsPage(url = f'{url_parts.scheme}://{url_parts.netloc}{a["href"]}', year = self.__year__).html()
 
         hitting_df['OPS'] = hitting_df['OBPct'].astype(float) + hitting_df['SlgPct'].astype(float)
         self.__df__ = pd.merge(
