@@ -553,7 +553,7 @@ class StatsPage(WebPage):
             self.__fetch_stat_ids__()
         elif url != '':
             self.html()
-            if not self.success():
+            if (not self.success()) | ('year_stat_category_id' in self.url()):
                 return
             if cbn_utils.NCAA_DOMAIN in self.url():
                 self.__fetch_ncaa_stats__()
