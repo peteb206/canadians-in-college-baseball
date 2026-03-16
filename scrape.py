@@ -12,7 +12,7 @@ pd.set_option('display.max_columns', None) # show all cols
 pd.set_option('display.max_colwidth', None) # show full width of showing cols
 pd.set_option('display.expand_frame_repr', False) # print cols side by side as it's supposed to be
 
-today_str = datetime.now().strftime("%Y-%m-%d")
+today_str = (datetime.now() if cbn_utils.RUNNING_LOCALLY else datetime.now() - timedelta(hours = 5)).strftime("%Y-%m-%d")
 
 def schools():
     # Fetch existing schools to dataframe
