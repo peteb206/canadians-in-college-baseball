@@ -9,7 +9,6 @@ html5lib==1.1
 blinker==1.7.0
 selenium-wire==5.1.0
 selenium-stealth==1.0.6
-curl_cffi==0.14.0
 
 # Data Manipulation
 pandas==1.5.3

@@ -258,11 +258,13 @@ def new_driver():
 
 driver = new_driver()
 
-def get(url: str):
+def get(url: str, attempt = 1):
     global driver
     try:
         driver.get(url)
     except:
         pause(driver.quit())
         driver = new_driver()
+        if attempt == 1:
+            get(url, attempt = 2)
     return driver

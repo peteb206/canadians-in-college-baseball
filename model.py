@@ -643,17 +643,19 @@ class StatsPage(WebPage):
             if 'Date' in df.columns:
                 continue
             if ('gp' in df.columns) | ('g' in df.columns):
+                df = df[(df['Unnamed: 0'] == 'Total') & (df.index == 0)].copy()
                 if ('gp' not in df.columns) & ('g' in hitting_df.columns):
                     df.rename({'g': 'gp'}, axis = 1, inplace = True)
                 if len(hitting_df.index) == 0:
-                    hitting_df = df[df['Unnamed: 0'] == 'Total'].copy()
+                    hitting_df = df
                 else:
-                    hitting_df = pd.merge(hitting_df, df[df['Unnamed: 0'] == 'Total'], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+                    hitting_df = pd.merge(hitting_df, df, how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
             elif ('app' in df.columns) | ('er' in df.columns):
+                df = df[(df['Unnamed: 0'] == 'Total') & (df.index == 0)].copy()
                 if len(pitching_df.index) == 0:
-                    pitching_df = df[df['Unnamed: 0'] == 'Total'].copy()
+                    pitching_df = df
                 else:
-                    pitching_df = pd.merge(pitching_df, df[df['Unnamed: 0'] == 'Total'], how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
+                    pitching_df = pd.merge(pitching_df, df, how = 'left', on = 'Unnamed: 0', suffixes = ['', '_'])
 
         hitting_df = hitting_df[hitting_cols]
         hitting_df.replace('-', 0, inplace = True)
