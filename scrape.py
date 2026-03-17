@@ -318,12 +318,12 @@ def stats():
                 first_name = player_row['first_name'],
                 stats_url = player_row['stats_url']
             )
-            # if (cbn_utils.NCAA_DOMAIN in player_row['stats_url']) | (cbn_utils.JUCO_DOMAIN in player_row['stats_url']): continue # test a specific player (i should be 2 less than the row number in the google sheet)
+            if (cbn_utils.NCAA_DOMAIN in player_row['stats_url']) | (cbn_utils.JUCO_DOMAIN in player_row['stats_url']): continue # test a specific player (i should be 2 less than the row number in the google sheet)
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
-            if days_since_last_check <= 1:
-                cbn_utils.log(f'{player}\'s stats were updated on {player_last_stats_update}... skipping')
-                continue
+            # if days_since_last_check <= 1:
+            #     cbn_utils.log(f'{player}\'s stats were updated on {player_last_stats_update}... skipping')
+            #     continue
             if player.stats_url == '':
                 cbn_utils.log(f'{player} does not have a `stats_url`... skipping')
                 continue
@@ -574,7 +574,7 @@ if __name__ == '__main__':
     # email_additions("pete")
     # find_player_stat_ids()
 
-    # stats()
+    stats()
     # positions()
 
     # minors()
