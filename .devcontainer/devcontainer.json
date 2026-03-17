@@ -1,0 +1,12 @@
+{
+    "name": "Canadians in College Codespace",
+    "image": "mcr.microsoft.com/devcontainers/python:3.11",
+    "postCreateCommand": "python -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": ".venv/bin/python"
+            }
+        }
+    }
+}
