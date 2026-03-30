@@ -1,7 +1,6 @@
 import re
 import requests
-from seleniumwire import webdriver
-from selenium_stealth import stealth
+import undetected_chromedriver as uc
 import os
 import platform
 import pandas as pd
@@ -235,36 +234,25 @@ headers = {
 
 def new_driver():
     log('Setting up new driver')
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--headless=new')
-    chrome_options.add_argument(f'user-agent={headers}')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options = uc.ChromeOptions()
+    # chrome_options.add_argument('--headless=new')
+    # chrome_options.add_argument(f'user-agent={headers}')
+    # chrome_options.add_argument('--disable-dev-shm-usage')
+    # chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    # chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    # chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.add_argument("--proxy-server=http://127.0.0.1:8080")
+    chrome_options.set_capability('unhandledPromptBehavior', 'accept')
     chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-    driver = webdriver.Chrome(options = chrome_options)
-
-    def interceptor(request):
-        parsed_url = urlparse(request.url)
-        del request.headers['Referer'] 
-        request.headers['Referer'] = f'{parsed_url.scheme}://{parsed_url.netloc}/'
-    driver.request_interceptor = interceptor
-
-    stealth(driver,
-        platform = 'Win32',
-        fix_hairline = True
-    )
-    return driver
+    return uc.Chrome(options = chrome_options, version_main = 146)
 
 driver = new_driver()
 
 def get(url: str, attempt = 1):
-    global driver
     try:
         driver.get(url)
     except:
-        pause(driver.quit())
-        driver = new_driver()
+        pause(None)
         if attempt == 1:
-            get(url, attempt = 2)
+            return get(url, attempt = 2)
     return driver

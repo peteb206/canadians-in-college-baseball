@@ -182,7 +182,7 @@ def players():
     for i, school_series in schools_df.iterrows():
         school_last_roster_check = school_series['last_roster_check']
         days_since_last_check = (datetime.today() - datetime.strptime(school_last_roster_check, "%Y-%m-%d")).days if school_last_roster_check != '' else 99
-        # if i not in [55, 56]: # test a specific school (i should be 2 less than the row number in the google sheet)
+        if i < 1459: continue # test a specific school (i should be 2 less than the row number in the google sheet)
         if (school_series['roster_url'] in ['']) | school_series['roster_url'].endswith('#') | (days_since_last_check < 2):
             continue # Skip schools that have no parseable roster site or have already been scraped recently
 
@@ -310,7 +310,8 @@ def stats():
         players_worksheet = google_sheets.hub_spreadsheet.worksheet(sheet_name)
         players_df = google_sheets.df(players_worksheet)
 
-        ncaa_count = 0 # need to track how often we hit this site so we don't get blocked
+        # need to track how often we hit this site so we don't get blocked
+        ncaa_count = 0
 
         for i, player_row in players_df.iterrows():
             player = Player(
@@ -318,24 +319,35 @@ def stats():
                 first_name = player_row['first_name'],
                 stats_url = player_row['stats_url']
             )
-            if (cbn_utils.NCAA_DOMAIN in player_row['stats_url']) | (cbn_utils.JUCO_DOMAIN in player_row['stats_url']): continue # test a specific player (i should be 2 less than the row number in the google sheet)
+            # if cbn_utils.NCAA_DOMAIN in player_row['stats_url']: continue # test a specific player (i should be 2 less than the row number in the google sheet)
             player_last_stats_update = player_row['last_stats_update']
             days_since_last_check = (datetime.today() - datetime.strptime(player_last_stats_update, "%Y-%m-%d")).days if player_last_stats_update != '' else 99
-            # if days_since_last_check <= 1:
-            #     cbn_utils.log(f'{player}\'s stats were updated on {player_last_stats_update}... skipping')
-            #     continue
+            if days_since_last_check <= 1:
+                cbn_utils.log(f'{player}\'s stats were updated on {player_last_stats_update}... skipping')
+                continue
             if player.stats_url == '':
                 cbn_utils.log(f'{player} does not have a `stats_url`... skipping')
                 continue
             if cbn_utils.NCAA_DOMAIN in player.stats_url:
                 ncaa_count += 1
-                if ncaa_count == 50: return
-            if player.add_stats(google_sheets.config['YEAR_SHORT']):
-                stat_values = list(player.to_dict().values())[13:]
-                player_last_stats_update = ''
-                if (player.G > 0) | (player_row['G'] in ['', 0, '0']) | (player.APP > 0) | (player_row['APP'] in ['', 0, '0']):
-                    player_last_stats_update = today_str
-                cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[player_last_stats_update, player_row['stats_url']] + stat_values]))
+                if ncaa_count == 20:
+                    for _ in range(180):
+                        cbn_utils.pause(None)
+                    ncaa_count = 0
+            for _ in range(1, 3): # try again if failed first try
+                if player.add_stats(google_sheets.config['YEAR_SHORT']):
+                    stat_values = list(player.to_dict().values())[13:]
+                    player_last_stats_update = ''
+                    if (player.G > 0) | (player_row['G'] in ['', 0, '0']) | (player.APP > 0) | (player_row['APP'] in ['', 0, '0']):
+                        player_last_stats_update = today_str
+                    cbn_utils.pause(players_worksheet.update(f'K{i + 2}:AJ{i + 2}', [[player_last_stats_update, player_row['stats_url']] + stat_values]))
+                    break
+                elif player.stats_page.status_code() == 429:
+                    cbn_utils.log('Need to get access back... pausing a minute')
+                    for _ in range(60):
+                        cbn_utils.pause(None)
+                else:
+                    cbn_utils.pause(None)
 
 def positions():
     # Manual corrections

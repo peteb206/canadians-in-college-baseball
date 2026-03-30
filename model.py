@@ -28,6 +28,7 @@ class WebPage:
         self.__html__ = ''
         self.__success__ = False
         self.__error_message__ = ''
+        self.__status_code__ = 0
 
         start_time = datetime.now()
         self.html()
@@ -58,6 +59,9 @@ class WebPage:
         if self.__driver__.current_url != self.url():
             return self.__driver__.current_url
 
+    def status_code(self):
+        return self.__status_code__
+
     def html(self) -> str:
         if self.__html__ != '':
             # page has already been fetched
@@ -87,10 +91,10 @@ class WebPage:
             if message['method'] == 'Network.responseReceived':
                 response = message['params']['response']
                 if self.__driver__.current_url.replace('?serverSide', '') == response['url'].replace('?serverSide', ''):
-                    status_code = response['status']
-                    self.__success__ = (200 <= status_code < 300)
+                    self.__status_code__ = response['status']
+                    self.__success__ = (200 <= self.__status_code__ < 300)
                     if not self.__success__:
-                        self.__error_message__ = status_code
+                        self.__error_message__ = self.__status_code__
                     break
         return self.__html__
 
@@ -779,11 +783,12 @@ class Player:
         self.positions = positions
         self.throws = throws
         self.year = year
-        self.school: School = None
+        self.school: School | None = None
         self.city = city
         self.province = province
         self.canadian = canadian
         self.stats_url = stats_url
+        self.stats_page: StatsPage | None = None
         self.G = 0
         self.AB = 0
         self.R = 0
@@ -854,9 +859,9 @@ class Player:
         }
 
     def add_stats(self, academic_year) -> bool:
-        stats_page = StatsPage(url = self.stats_url, year = academic_year)
-        stats_df = stats_page.to_df()
-        if not isinstance(stats_df, pd.DataFrame):
+        self.stats_page = StatsPage(url = self.stats_url, year = academic_year)
+        stats_df = self.stats_page.to_df()
+        if (not self.stats_page.success()) | (not isinstance(stats_df, pd.DataFrame)):
             return False
         stat_dict_list = stats_df.to_dict(orient = 'records')
         if len(stat_dict_list) == 0:
